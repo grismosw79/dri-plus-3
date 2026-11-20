@@ -1,0 +1,2 @@
+# Preserve imported release source bytes, including existing CRLF files.
+* -text
