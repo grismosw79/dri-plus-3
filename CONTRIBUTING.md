@@ -8,4 +8,4 @@ Run `python3 scripts/run_portable_checks.py` for changes touching the launcher, 
 
 Use copies of saves for in-game validation. Give candidate plugins distinct version labels, and keep the current release available for rollback. The maintainer decides when a candidate becomes a public release.
 
-Keep executable captures, personal diagnostics, saves, credentials and build outputs out of commits. This private collaboration setup does not select an open-source license or authorize making the repository public.
+Keep executable captures, personal diagnostics, saves, credentials and build outputs out of commits. The repository is public for source review and compatibility collaboration. No open-source license has been selected.

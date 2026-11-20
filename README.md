@@ -1,6 +1,6 @@
 # DRI+ 3.0
 
-Dynasty Recruiting Intelligence for College Football 27. This repository is prepared for source review and compatibility work with Ace, Zip and Sdmart3.
+Dynasty Recruiting Intelligence for College Football 27. This public repository supports source review and compatibility work, including collaboration with Ace, Zip and Sdmart3.
 
 The starting point is **R22 TU1117 T3**, promoted to the complete November 19, 2026 release after the maintainer reported successful startup from both EA App and Steam users. The native gameplay code is unchanged from T2. T3 adds a second exact executable fingerprint to the monitor and updates the managed plugin's metadata and payload pin.
 
@@ -35,4 +35,4 @@ Captured game memory, save-derived fixture data, user diagnostics, compiled DLLs
 
 The `.fbmod`, raw FTC exports and initial save-preparation app are separate project components and are not included in this DLL source tree. FTC comparisons need the matching November 17 tuning baseline separately.
 
-Start with a private repository. Public distribution and an open-source license remain decisions for the maintainer; this preparation does not grant a new license.
+The source is publicly available for review and compatibility collaboration. Changes are proposed through pull requests and reviewed by the maintainer. No open-source license has been selected.
