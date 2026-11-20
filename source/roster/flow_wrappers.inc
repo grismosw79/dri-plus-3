@@ -1,0 +1,15 @@
+/* Native arguments and return registers preserved; calls forwarded exactly once. */
+static U rm_0(U a) { LONG64 token=trace_begin(0,a,0,0); U result=((U(*)(U))(game_base+0x82a8430))(a); trace_end(0,a,0,0,token); return result; }
+static U rm_1(U a) { LONG64 token=trace_begin(1,a,0,0); rm_phase_enter(1,a,0); U result=((U(*)(U))(game_base+0x829ea30))(a); rm_phase_leave(1,0); trace_end(1,a,0,0,token); return result; }
+static U rm_2(U a,U b) { LONG64 token=trace_begin(2,a,b,0); rm_phase_enter(2,a,b); U result=rm_block(b,2)?0:((U(*)(U,U))(game_base+0x829e3d0))(a,b); rm_phase_leave(2,b); trace_end(2,a,b,0,token); return result; }
+static U rm_3(U a,U b) { LONG64 token=trace_begin(3,a,b,0); rm_phase_enter(3,a,b); U result=rm_block(b,3)?0:((U(*)(U,U))(game_base+0x82ab990))(a,b); rm_phase_leave(3,b); trace_end(3,a,b,0,token); return result; }
+static U rm_4(U a) { if(!rm_active)InterlockedExchange(&observer_thread,(LONG)GetCurrentThreadId()); LONG64 token=trace_begin(4,a,0,0); rm_cycle(a); rm_failed_route(); U result=((U(*)(U))(game_base+0x81a1e30))(a); trace_end(4,a,0,0,token); return result; }
+static U rm_5(U a) { LONG64 token=trace_begin(5,a,0,0); rm_phase_enter(5,a,0); rm_audit_phase="BEFORE_CYCLE_END"; rm_finish(); rm_failed_route(); U result=((U(*)(U))(game_base+0x81a1c20))(a); rm_phase_leave(5,0); trace_end(5,a,0,0,token); return result; }
+static U rm_6(U a,U b) { LONG64 token=trace_begin(6,a,b,0); rm_before_enroll(a,b); rm_phase_enter(6,a,b); U result=rm_block(b,6)?0:((U(*)(U,U))(game_base+0x81b3bd0))(a,b); rm_phase_leave(6,b); trace_end(6,a,b,0,token); return result; }
+static U rm_7(U a,U b) { LONG64 token=trace_begin(7,a,b,0); rm_phase_enter(7,a,b); U result=rm_block(b,7)?0:((U(*)(U,U))(game_base+0x8162040))(a,b); rm_phase_leave(7,b); trace_end(7,a,b,0,token); return result; }
+static U rm_8(U a,U b,U c,U d,U e) { LONG64 token=trace_begin(8,a,b,0); rm_phase_enter(8,a,b); U result=rm_block(b,8)?0:((U(*)(U,U,U,U,U))(game_base+0x814bb00))(a,b,c,d,e); rm_phase_leave(8,b); trace_end(8,a,b,0,token); return result; }
+static U rm_9(U a,U b,U c) { LONG64 token=trace_begin(9,a,b,0); rm_phase_enter(9,a,b); U result=rm_block(b,9)?0:((U(*)(U,U,U))(game_base+0x8176cc0))(a,b,c); rm_phase_leave(9,b); trace_end(9,a,b,0,token); return result; }
+static U rm_10(U a,U b) { LONG64 token=trace_begin(10,a,b,0); rm_phase_enter(10,a,b); U result=rm_block(b,10)?0:((U(*)(U,U))(game_base+0x837b770))(a,b); rm_phase_leave(10,b); trace_end(10,a,b,0,token); return result; }
+static U rm_11(U a,U b) { LONG64 token=trace_begin(11,a,b,0); rm_phase_enter(11,a,b); U result=rm_block(b,11)?0:((U(*)(U,U))(game_base+0x81a2400))(a,b); rm_phase_leave(11,b); trace_end(11,a,b,0,token); rm_after_validate(b); return result; }
+static U rm_12(U a,U b,U c,U d) { LONG64 token=trace_begin(12,a,c,b); U result=((U(*)(U,U,U,U))(game_base+0x8615a00))(a,b,c,d); trace_end(12,a,c,b,token); return result; }
+static U rm_13(U a,U b,U c,U d,U e) { LONG64 token=trace_begin(13,a,d,c); U result=((U(*)(U,U,U,U,U))(game_base+0x86165d0))(a,b,c,d,e); trace_end(13,a,d,c,token); return result; }
