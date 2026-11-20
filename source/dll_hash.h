@@ -1,0 +1,1 @@
+#define DRI_DLL_HASH "d3899e8cd372ca73ce53adcc6e6a8919c06d3082e91174f51284c8775ffebfce"
