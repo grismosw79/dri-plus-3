@@ -3,6 +3,7 @@ import argparse
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 
 def main():
@@ -24,7 +25,13 @@ def main():
         (out / (name + '.txt')).write_text(result.stdout, encoding='utf-8')
         print(name + ': ' + result.stdout.rstrip().split('\n')[-1], flush=True)
         result.check_returncode()
-    print('PASS: all four portable check programs.')
+    result = subprocess.run([sys.executable, str(root / 'tests' / 'test_roster_owner_index.py'),
+                             '--cc', args.cc, '--out', str(out / 'roster_owner_index')],
+                            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    (out / 'test_roster_owner_index.txt').write_text(result.stdout, encoding='utf-8')
+    print('test_roster_owner_index: ' + result.stdout.rstrip().split('\n')[-1], flush=True)
+    result.check_returncode()
+    print('PASS: all four portable check programs and the roster owner index property test.')
 
 
 if __name__ == '__main__':
