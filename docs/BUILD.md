@@ -35,7 +35,7 @@ On Linux with GCC and Python 3:
 python3 scripts/run_portable_checks.py
 ```
 
-The runner compiles and executes the four existing top-level C checks: exact game identity acceptance/rejection, the release monitor with Win32 mocks, roster policy regression and specialist-room repair. It then runs `tests/test_roster_owner_index.py`, the property test for the roster pass ownership index (see [Speed changes](SPEED.md)). It writes binaries and logs beneath `build/portable-checks/` and stops on failure. These checks do not launch the game or exercise real Windows injection.
+The runner compiles and executes the four existing top-level C checks: exact game identity acceptance/rejection, the release monitor with Win32 mocks, roster policy regression and specialist-room repair. It then runs `tests/test_roster_owner_index.py` and `tests/test_cache_stack.py`, the property tests for the roster pass ownership index and the cache stack (see [Speed changes](SPEED.md)). It writes binaries and logs beneath `build/portable-checks/` and stops on failure. These checks do not launch the game or exercise real Windows injection.
 
 ## Managed offline checks
 
