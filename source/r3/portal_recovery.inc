@@ -24,9 +24,14 @@ typedef struct {int valid,prestige,flex_ready,flex_allowed,team_excess,hs_reserv
 /* Native setters in 081486b0 (stage) and 081a4273 (integer offer count)
    use the same table vfunc +148 and then 08055870(table). +140 is boolean. */
 static void portal_recovery_scalar(Rec record,int ordinal,unsigned value) {
+ /* Cache stack: a recruit stage write that stays below 5, or an HS preference re-ordering write, is one that no
+    HS snapshot reads (classified before the write; one extra stage read, inside a window only). */
+ int excused=cache.active && ((ordinal==9 && value<5 && scalar(record,9,0x108)<5) || (ordinal<=1 && cache.pref_scope));
  U table=q((U)record+0x10),key=field(schema(record),ordinal);
+ if(ordinal==9)cache_note_stage_write();
  ((void(*)(U,uint32_t,U,unsigned))q(q(table)+0x148))(table,row(record),key,value);
- ((void(*)(U))(game_base+0x080595e0))(table);
+ ((void(*)(U))(game_base+0x080595e0))(table);cache_note_write();
+ if(excused)cache.excused++;
 }
 static void portal_recovery_release(PortalRecoveryPlan *p) {
  for(unsigned i=0;i<p->count;i++)release(p->schools[i].record);
@@ -197,7 +202,7 @@ static void portal_recover_market(U eval,int opening_grace) {
    Rec team=portal_team_by_id(eval,p->schools[j].tid);
    if(!team){error="recovery_drop_team";goto cleanup;}
    U candidate[6]={(U)p->recruit,0,0,0,0,0};
-   int result=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);
+   int result=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);cache_note_removal();
    int offered=portal_active_offer(p->recruit,team);
    if(!result && offered==0)test29_class_invalidate(team);
    release(team);
@@ -464,7 +469,7 @@ static void portal_deadline_recover(Rec recruit,U eval) {
  for(unsigned tid=0;tid<138;tid++)if(drop[tid]) {
   Rec team=portal_team_by_id(eval,tid);if(!team){error="deadline_drop_team";goto cleanup;}
   U candidate[6]={(U)recruit,0,0,0,0,0};
-  int result=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);
+  int result=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);cache_note_removal();
   int offered=portal_active_offer(recruit,team);release(team);
   if(result || offered){error="deadline_drop";goto cleanup;}
  }

@@ -114,6 +114,7 @@ static PortalScore *portal_score_entry(PortalCache *c,U rec,int create) {
  if(create)portal_fault("score_cache_full");return 0;
 }
 void DriOnPortalPrepare(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return;
  uint64_t phase_start=test29_clock_ms();
  const char *volatile phase="prepare_context";
@@ -183,6 +184,7 @@ void DriOnPortalPrepare(Registers *r) {
  } __except(fail_exception(phase,GetExceptionCode())){}
 }
 void DriOnPortalScore(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_SCORE);
  if(mode<0 || faulted)return;
  __try {
   U sp=(U)(r+1),caller=q(sp+0x88);
@@ -247,6 +249,7 @@ void DriOnPortalScore(Registers *r) {
    the allocator below protects the chosen existing targets without deleting
    and re-adding them. HS targets and secured commitments keep native rules. */
 void DriOnPortalRetain(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   PortalCache *c=portal_cache(0);U sp=(U)(r+1),tr=q(r->rbp+0x28);
@@ -354,6 +357,7 @@ __declspec(dllexport) int DriTestPortalChoiceRace(PortalChoice *p,Rec target,Rec
    candidates. All transient scores are restored even if behavior was disabled.
    Native add/remove operations, capacity and eligibility remain in control. */
 void DriOnPortalAllocate(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  PortalChoice *pool=0;PortalNativeCandidate *copy=0;
  __try {
   PortalCache *c=portal_cache(0);U sp=(U)(r+1),tr=q(r->rbp+0x28);
@@ -450,6 +454,7 @@ cleanup:;
  if(pool)HeapFree(GetProcessHeap(),0,pool);
 }
 void DriOnPortalQuota(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return;
  __try {
   PortalCache *c=portal_cache(0);if(!c || (!c->valid && !c->hs_valid))return;
@@ -463,6 +468,7 @@ void DriOnPortalQuota(Registers *r) {
  } __except(fail_exception("portal_quota",GetExceptionCode())){}
 }
 void DriOnPortalSelect(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted || !(r->rax&255))return;
  __try {
   U context=q(r->rbp+0x67),rr=q(r->rbp+0x77);
@@ -480,6 +486,7 @@ void DriOnPortalSelect(Registers *r) {
  } __except(fail_exception("portal_select",GetExceptionCode())){}
 }
 int DriOnPortalFallbackStart(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return 0;
  __try {
   PortalCache *c=portal_cache(1);if(!c){portal_fault("fallback_cache");return 0;}
@@ -498,6 +505,7 @@ int DriOnPortalFallbackStart(Registers *r) {
  } __except(fail_exception("portal_fallback_start",GetExceptionCode())){return 0;}
 }
 int DriOnPortalFallback(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return 0;
  __try {
   PortalCache *c=portal_cache(0);if(!c || c->fallback_frame!=r->rbp)return 0;
@@ -509,6 +517,7 @@ int DriOnPortalFallback(Registers *r) {
 }
 
 void DriOnHsQuota(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   PortalCache *c=portal_cache(0);U sp=(U)(r+1);

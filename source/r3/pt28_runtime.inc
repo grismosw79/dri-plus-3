@@ -20,7 +20,7 @@ static SRWLOCK pt28_lock=SRWLOCK_INIT;
 static volatile LONG pt28_epoch=1;
 static volatile LONG pt28_wait_logs=0;
 static struct {U table;uint32_t id;int year,week,type,stage,offseason;unsigned samples[2][22];} pt28_log_scope;
-static void pt28_invalidate(void){InterlockedIncrement(&pt28_epoch);}
+static void pt28_invalidate(void){InterlockedIncrement(&pt28_epoch);cache_note_pt28();}
 static void pt28_reset(void){
  memset(&pt28_index,0,sizeof(pt28_index));
 }
@@ -379,6 +379,7 @@ static int pt28_grade(U context,Rec team,Rec player,int *grade){
  if(ok==0&&!faulted)portal_fault("PT28_inputs");return ok==1&&!faulted&&mode==1;
 }
 int DriPt28Grade(U context,Rec *team,Rec *player){
+ cache_hook_entry(CACHE_HOOK_GRADE);
  if(mode==1&&!faulted&&team&&*team&&player&&*player){
   int ready=0;
   __try {

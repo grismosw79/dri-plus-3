@@ -120,6 +120,7 @@ static int test33_hs_published(Rec recruit,Rec team) {
    normal and special CPU offer/payment routes. Returning1 asks the hook to
    return native false; permitted calls execute the unchanged native body. */
 int DriOnOfferAction(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OFFER);
  if(mode!=1 || faulted)return 0;
  __try {
   int action=i32((U)(r+1)+0x28),productive=action==2 || (action>=5 && action<=9);

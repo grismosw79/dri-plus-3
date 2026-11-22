@@ -30,7 +30,7 @@ static int portal29_admit(Rec team,Rec recruit,U eval,int verified_score) {
  _Static_assert(sizeof(candidate)==48,"Test29 native board candidate ABI");
  candidate.values[8]=verified_score;
  U manager=q(eval+0xc8);if(!manager){portal_fault("portal29_admit_manager");return -1;}
- int result=((int(*)(U,Rec*,void*))(game_base+0x081496c0))(manager,&team,&candidate);
+ int result=((int(*)(U,Rec*,void*))(game_base+0x081496c0))(manager,&team,&candidate);cache_note_write();
  board=board_array(team);U after=board?array_count(board):MAX_BOARD+1;matches=0;
  if(board && after<=50)for(U j=0;j<after;j++) {
   Rec target=array_at(board,j),linked=target?reference(target,10):0;

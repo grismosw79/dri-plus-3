@@ -404,7 +404,7 @@ static int hs28_prune(Rec team,U eval,int closed_only) {
   unsigned before=scalar(rec,14,0x100),status=scalar(target,12,0x108);
   const char *reason=hs31_withdraw_reason(&shot,&pool[i],rec,team,eval,closed);
   U candidate[6]={(U)rec,0,0,0,0,0};
-  int rc=((int(*)(U,Rec*,U*))(game_base+0x081a7b10))(manager,&team,candidate);
+  int rc=((int(*)(U,Rec*,U*))(game_base+0x081a7b10))(manager,&team,candidate);cache_note_removal();
   test29_class_invalidate(team);
   unsigned after=scalar(rec,14,0x100);Rec still=reference(target,10);
   int ok=!rc && !still && after==before-((status>=2 && status<=4 && before>0)?1:0);

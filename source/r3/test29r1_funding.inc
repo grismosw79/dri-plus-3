@@ -5,7 +5,8 @@
    produce a usable allowance, restore every score and report the failed path. */
 static int test29r1_native_limit(U eval,Rec team,PortalFundingCandidate *a,int index) {
  Rec target=(Rec)a[index].target;U begin=(U)a;
- return ((int(*)(U,Rec*,Rec*,unsigned,U*))(game_base+0x0817e810))(eval,&team,&target,(unsigned)index,&begin);
+ int rc=((int(*)(U,Rec*,Rec*,unsigned,U*))(game_base+0x0817e810))(eval,&team,&target,(unsigned)index,&begin);
+ cache_note_write();return rc;
 }
 static void test29r1_recovery_funding(Rec team,U eval,PortalFundingCandidate *a,int n,U *indices) {
  if(mode!=1 || faulted || n<1 || n>MAX_BOARD || hs28_regular(eval))return;

@@ -591,6 +591,7 @@ static Rec portal_leader(Rec recruit,U context) {
  return team;
 }
 int DriOnPortalStars(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return 0;
  __try {
   Rec p=(Rec)q(r->rdx);if(!p){portal_fault("star_player");return 0;}
@@ -600,7 +601,7 @@ int DriOnPortalStars(Registers *r) {
   log_line("PORTAL_STAR,%u,%d,%d,%d,%d,%d,%s",row(p),pos,year,ovr,old+1,star+1,mode?"APPLIED":"WOULD_APPLY");
   if(!mode)return 0;
   U t=q((U)p+0x10),f=field(schema(p),231);
-  ((void(*)(U,uint32_t,U,int))q(q(t)+0x148))(t,row(p),f,star);
+  ((void(*)(U,uint32_t,U,int))q(q(t)+0x148))(t,row(p),f,star);cache_note_write();
   ((void(*)(U))(game_base+0x080595e0))(t);
   if(scalar(p,231,0x108)!=(unsigned)star){portal_fault("star_write");return 0;}
   return 1;
@@ -609,6 +610,7 @@ int DriOnPortalStars(Registers *r) {
 /* Called immediately after the native transition condition. A veto makes the
    original condition false, so its existing loop cleanup runs normally. */
 void DriOnPortalWeekly(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted || !(r->rax&255))return;
  __try {
   U sp=(U)(r+1);Rec transition=(Rec)q(sp+0x38);
@@ -632,6 +634,7 @@ void DriOnPortalWeekly(Registers *r) {
    uses the original failed-condition cleanup; accepted ownership is observed
    before publication and counted only after the native stage actually changes. */
 int DriOnHsOwnership(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return 0;
  __try {
   U sp=(U)(r+1);Rec transition=(Rec)q(sp+0x38);
@@ -662,12 +665,14 @@ int DriOnHsOwnership(Registers *r) {
    hides native ownership and before Team.CommittedPlayers is published.
    No policy veto or stage write; the ledger is used only after native signing. */
 void DriOnBulkOwnership(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   portal_note_signing((Rec)q(r->rbp-0x19),(Rec)r->r12,r->r13,"SIGN_BULK");
  } __except(fail_exception("bulk_signing_owner",GetExceptionCode())){}
 }
 int DriOnPortalInstant(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return 0;
  __try {
   Rec recruit=(Rec)q(r->rbp-0x41),team=(Rec)q(q(r->rbp+0x77));U context=q(r->rbp+0x67);
@@ -687,6 +692,7 @@ int DriOnPortalInstant(Registers *r) {
 }
 /* Before native NSD inserts a soft commitment into its destination map. */
 int DriOnPortalBulkGuard(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return 0;
  __try {
   Rec recruit=(Rec)q(r->rbp-0x19),team=(Rec)r->r12;U context=r->r13;
@@ -710,6 +716,7 @@ int DriOnPortalBulkGuard(Registers *r) {
  } __except(fail_exception("bulk_guard",GetExceptionCode())){return 0;}
 }
 int DriOnPortalSigning(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return 0;
  __try {
   Rec recruit=(Rec)q((U)(r+1)+0x30),team=(Rec)r->rbx;U context=q(r->rbp+0x57);
@@ -721,6 +728,7 @@ int DriOnPortalSigning(Registers *r) {
  __except(fail_exception("portal_signing",GetExceptionCode())){return 0;}
 }
 int DriOnPortalDeadline(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  /* Moved guard includes native null-winner branch, including diagnostic mode. */
  if(mode<0 || faulted)return r->r15?0:-1;
  __try {
@@ -755,7 +763,7 @@ static void portal_prune(Rec team,U eval) {
   /* Recheck after decoding: a fault must never become a destructive removal. */
   if(blocked && !faulted && mode==1) {
    U candidate[6]={(U)recruit,0,0,0,0,0};
-   int rc=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(q(eval+0xc8),&team,candidate);
+   int rc=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(q(eval+0xc8),&team,candidate);cache_note_removal();
    log_line("PORTAL_DROP,%u,%u,%d",scalar(team,383,0x100),row(recruit),rc);
    if(rc)portal_fault("native_remove");
   }

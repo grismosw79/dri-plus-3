@@ -80,6 +80,7 @@ done:
    this validated identity-only batch before the first native school collector.
    The later callback remains an idempotent final consistency check. */
 void DriBeforeNsdCollect(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   U eval=r->r13;

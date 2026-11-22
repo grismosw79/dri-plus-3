@@ -54,6 +54,7 @@ static void portal29_execution_observe(U eval,Rec team,Rec target,int action,int
  release(recruit);
 }
 void DriAfterPortal29GenericAction(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_TEAM);
  if(mode!=1 || faulted)return;
  __try {
   U th=q(r->rbp+0x67);Rec team=th?(Rec)q(th):0,target=r->rsi?(Rec)q(r->rsi):0;
@@ -61,6 +62,7 @@ void DriAfterPortal29GenericAction(Registers *r) {
  } __except(fail_exception("portal29_generic_witness",GetExceptionCode())){}
 }
 void DriAfterPortal29Pitch(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_TEAM);
  if(mode!=1 || faulted)return;
  __try {
   Rec team=r->r12?(Rec)q(r->r12):0,target=r->r13?(Rec)q(r->r13):0;

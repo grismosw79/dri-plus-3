@@ -15,6 +15,7 @@ static void academy29_pending_clear(void) {
    empty. Native roster publication follows that reference, not the Signed
    flag. Repair only this exact own-academy return before native vector append. */
 int DriOnAcademy29ReturnTarget(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(!academy29_return_eval)return 0;
  if(mode!=1 || faulted)return 1;
  __try {
@@ -34,7 +35,7 @@ int DriOnAcademy29ReturnTarget(Registers *r) {
   if(linked && !same){release(linked);portal_fault("academy_return_target_conflict");return 1;}
   release(linked);
   if(!same) {
-   ((void(*)(Rec,U,Rec*))(game_base+0x0805e530))(target,field(schema(target),10),&recruit);
+   ((void(*)(Rec,U,Rec*))(game_base+0x0805e530))(target,field(schema(target),10),&recruit);cache_note_write();
    linked=reference(target,10);same=linked && portal_same_record(linked,recruit);release(linked);
    if(!same){portal_fault("academy_return_target_write");return 1;}
   }
@@ -126,7 +127,7 @@ static int academy29_restore(Registers *r) {
    }
    if(count>12000-academy29_pending_count){portal_fault("academy_return_pending_limit");return -1;}
    log_line("TEST29R4_ACADEMY_RETURN_PASS,%u,AFTER_NORMAL_PORTAL_FINALIZATION",count);
-   ((void(*)(U,U,U))(game_base+0x081b5670))(eval,r->rbp-0x78,r->rbp-0x18);
+   ((void(*)(U,U,U))(game_base+0x081b5670))(eval,r->rbp-0x78,r->rbp-0x18);cache_note_write();
    for(unsigned i=0;i<count && !faulted;i++) {
     int owner=-1;Rec player=reference(pending[i],5);
     unsigned origin=player?scalar(player,230,0x100):255;

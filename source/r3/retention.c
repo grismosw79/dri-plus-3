@@ -71,6 +71,7 @@ static volatile LONG64 pass_counter = 0;
 static SRWLOCK log_lock = SRWLOCK_INIT;
 static HANDLE log_file = INVALID_HANDLE_VALUE;
 #include "../log_io.h"
+#include "cache_stack.h"
 static Log30State log30_state;
 #ifdef DRI_EMULATION_TEST
 static int log30_deep=1; /* Historical fixture evidence remains complete. */
@@ -173,15 +174,17 @@ U ResumeHsShortlist;
 extern void HookHsShortlist(void);
 extern unsigned char NativeHsShortlist(Wrap *,Rec *,U);
 unsigned char DriHsShortlist(Wrap *,Rec *,U);
+static unsigned char hs_shortlist_advice(Wrap *,Rec *,U);
 static int locked_out(Rec r, Rec team, U eval) {
     Wrap w=wrap(r);
-    return DriHsShortlist(&w,&team,eval+0xd0)!=0;
+    return hs_shortlist_advice(&w,&team,eval+0xd0)!=0;
 }
 static int position(Rec r) {
     Rec p=reference(r,5); if(!p) return -1;
     int pos=(int)scalar(p,3,0x108); release(p); return pos;
 }
 static void log_line(const char *fmt, ...) {
+    cache_log_calls++;
     if(log_file==INVALID_HANDLE_VALUE) return;
     if(!rm18_deep() && log30_kind(fmt)>=0)return;
     char b[1400]; va_list a; va_start(a,fmt);
@@ -224,7 +227,12 @@ static int fail_exception(const char *where, DWORD code) {
 /* R13: the shared native lockout entry serves UI, user and CPU callers.
    Only unsigned HS/JUCO preferences become advisory. This does not grant
    eligibility, an offer, capacity, interest or ownership. */
+/* Native entries go through DriHsShortlist; DRI's own lockout checks (locked_out) call the body directly. */
 unsigned char DriHsShortlist(Wrap *recruit,Rec *team,U tuning) {
+    cache_hook_entry(CACHE_HOOK_TEAM_GRADE);
+    return hs_shortlist_advice(recruit,team,tuning);
+}
+static unsigned char hs_shortlist_advice(Wrap *recruit,Rec *team,U tuning) {
     if(mode==1 && !faulted && recruit && recruit->rec && team && *team) {
         __try {
             Rec r=recruit->rec;
@@ -376,7 +384,7 @@ static int close_filled_positions(Session *s, Rec team) {
            It owns offer-count, visit, hours, target clearing and array removal. */
         U candidate[6]={ (U)recruit,0,0,0,0,0 };
         if(faulted || mode!=1){release(recruit);release(target);return 0;}
-        int rc=((int (*)(U,Rec *,void *))(game_base+0x081a7b10))(manager,&team,candidate);
+        int rc=((int (*)(U,Rec *,void *))(game_base+0x081a7b10))(manager,&team,candidate);cache_note_removal();
         uint32_t offers_after=scalar(recruit,14,0x100);
         Rec remaining=reference(target,10);int target_cleared=!remaining;release(remaining);
         release(recruit);release(target);
@@ -414,6 +422,7 @@ static void r3_closed_recovery(U eval,const char *site);
 static void r2_ordinary_funding(U eval,Rec team,unsigned year,unsigned week,unsigned funded);
 static int r2_hs_requested(Rec recruit,Rec team,U eval);
 
+#include "cache_stack.inc"
 #include "portal.inc"
 #include "test29_observe.inc"
 #include "hs28_score.inc"
@@ -446,6 +455,7 @@ static void portal29_observe_all(U eval,const char *site);
 #include "eps_runtime.inc"
 
 void DriOnStart(Registers *r) {
+    cache_hook_entry(CACHE_HOOK_OTHER);
     if(mode<0 || faulted) return;
     __try {
         Session *s=session(1);if(!s) return;
@@ -514,6 +524,7 @@ void DriOnStart(Registers *r) {
     } __except(fail_exception("start",GetExceptionCode())) { }
 }
 void DriOnProtect(Registers *r) {
+    cache_hook_entry(CACHE_HOOK_OTHER);
     if(mode<0 || faulted) return;
     __try {
         Session *s=session(0);if(!in_scope(r,s)) return;
@@ -542,6 +553,7 @@ static int open_position(Rec recruit, Rec team, Session *s) {
     return position(recruit);
 }
 int DriOnAdmit(Registers *r) {
+    cache_hook_entry(CACHE_HOOK_OTHER);
     if(mode<0 || faulted) return 0;
     __try {
         Session *s=session(0);

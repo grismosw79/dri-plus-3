@@ -245,7 +245,7 @@ static int r2_fund(Rec r,Rec team,U eval,int portal,int pos,R2Pursuit *v) {
   if(portal && !rc4_live_window(eval))goto finish;
   int price=ask>paid?ask:paid;
   offer_rc=((int(*)(U,Rec*,Rec*,int,void*,int,int))(game_base+0x0819ee10))(
-       q(eval+0xc8),&team,&t,price,0,i32(eval+0x1a8),i32(eval+0x1a4));
+       q(eval+0xc8),&team,&t,price,0,i32(eval+0x1a8),i32(eval+0x1a4));cache_note_write();
   if(offer_rc || faulted || scalar(t,12,0x108)<2)goto finish;
  }
  if(portal)r2_assign_slot(r,team,eval,v,pos);else hs29_offer_invalidate();
@@ -254,7 +254,7 @@ static int r2_fund(Rec r,Rec team,U eval,int portal,int pos,R2Pursuit *v) {
   Rec b=reference(team,224);int assigned=b?(int)scalar(b,1,0x100):-1;release(b);
   /* Native add-action entry used by the title's recruiting interface. It
      validates the individual cap, charges board hours and sets the action. */
-  action_rc=((int(*)(U,Rec*,Rec*,int))(game_base+0x08147960))(q(eval+0xc8),&team,&t,action);
+  action_rc=((int(*)(U,Rec*,Rec*,int))(game_base+0x08147960))(q(eval+0xc8),&team,&t,action);cache_note_write();
   b=reference(team,224);int updated=b?(int)scalar(b,1,0x100):-1;release(b);
   if(!action_rc && (updated-assigned!=effort || !scalar(t,action+10,0xf8))){
    portal_fault("R2_action_hour_ledger");goto finish;
@@ -548,7 +548,7 @@ static void r3_after_actions(U eval,Rec team) {
 static U r2_before_actions(U eval,Rec *team) {
  if(mode==1 && !faulted && eval && team && *team)
   __try {r2_sweep(eval);} __except(fail_exception("R2_pre_action",GetExceptionCode())){}
- U result=((U(*)(U,Rec*))(game_base+0x08152bd0))(eval,team);
+ U result=((U(*)(U,Rec*))(game_base+0x08152bd0))(eval,team);cache_note_write();
  if(mode==1 && !faulted && eval && team && *team)
   __try {r3_after_actions(eval,*team);} __except(fail_exception("R3_post_action",GetExceptionCode())){}
  return result;

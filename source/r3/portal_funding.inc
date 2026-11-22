@@ -17,6 +17,7 @@ _Static_assert(sizeof(PortalFundingCandidate)==72 && offsetof(PortalFundingCandi
    Observe funded actions and recorded execution separately; never spend,
    offer, or change a board here. */
 void DriAfterHsFunding(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   hs29_offer_invalidate(); /* Native funding may have created same-week offers. */
@@ -112,6 +113,7 @@ static void hs28_funding(Registers *r,Rec team,U eval,int after_offers) {
  test32_hs_minimum_share(team,eval,a,n,indices,pool,np);
 }
 void DriOnPortalFunding(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   U eval=r->rsi,tr=q(r->rbp-0x60);Rec team=tr?(Rec)q(tr):0;
@@ -219,6 +221,7 @@ void DriOnPortalFunding(Registers *r) {
 /* Safe boundary after the indexed scholarship pass and before the physical
    productive-action pass. There is no active candidate iterator to mutate. */
 void DriBetweenHsFunding(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   U eval=r->rsi,holder=q(r->rbp-0x60);Rec team=holder?(Rec)q(holder):0;if(!team)return;

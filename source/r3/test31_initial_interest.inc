@@ -21,6 +21,7 @@ static int test31_initial_commit_block(Rec recruit,U eval,unsigned next) {
  return blocked;
 }
 int DriOnInitialHsStage(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return 0;
  __try {
   return test31_initial_commit_block((Rec)q(r->rbp+7),r->r13,(unsigned)r->rax);
