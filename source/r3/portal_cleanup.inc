@@ -58,6 +58,7 @@ static PortalCleanupAuthorization *portal_cleanup_authorization(int create) {
    ownership snapshot below. All ordinary native/UI removal calls are unchanged.
    Hook: 081A409E, immediately after the native protected-owner predicate. */
 void DriOnPortalCleanupProtection(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted || !(r->rax&255))return;
  __try {
   PortalCleanupAuthorization *s=portal_cleanup_authorization(0);
@@ -235,7 +236,7 @@ static int portal_cleanup_run_kind(U eval,Rec filter,int expected_owner,int hs,R
   int rc;
   if(hs_cleanup_trace)hs_cleanup_step("remove_target",(int)item->tid,(int)row(item->recruit),(int)i);
   __try {rc=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);}
-  __finally {auth->active=0;}
+  __finally {auth->active=0;cache_note_removal();}
   hs_cleanup_step("verify_removal",(int)item->tid,-1,(int)i);
   unsigned offers_after=scalar(item->recruit,14,0x100);
   current=reference(item->target,10);int cleared=!current;release(current);

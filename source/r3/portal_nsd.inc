@@ -72,7 +72,7 @@ static Rec portal_nsd_winner(Rec recruit,U eval,int prune) {
   Rec team=portal_team_by_id(eval,tid);U manager=q(eval+0xc8);
   if(!team || !manager){release(team);portal_fault("NSD_prune");break;}
   U candidate[6]={(U)recruit,0,0,0,0,0};
-  int result=((int(*)(U,Rec*,U*))(game_base+0x081a7b10))(manager,&team,candidate);
+  int result=((int(*)(U,Rec*,U*))(game_base+0x081a7b10))(manager,&team,candidate);cache_note_removal();
   int still_offered=portal_active_offer(recruit,team);release(team);
   if(result || still_offered){portal_fault("NSD_prune_result");break;}
   log_line("NSD_OFFER_WITHDRAW,%u,%u",row(recruit),tid);
@@ -118,6 +118,7 @@ _Static_assert(sizeof(NsdTeamLookup)==24 && offsetof(NsdTeamLookup,inserted)==16
 #include "test29r2_portal_retry.inc"
 #include "academy29_return.inc"
 void DriBeforeNsdPublish(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   U eval=r->r13;if(!eval || !*(unsigned char*)(eval+0x1a0))return;
@@ -143,7 +144,7 @@ void DriBeforeNsdPublish(Registers *r) {
     ((void(*)(U,NsdTeamLookup*,unsigned,unsigned*,U))(game_base+0x08168a40))(r->rbp-0x78,&result,0,&tid,tid);
     if(!result.node){release(team);portal_fault("NSD_HS_vector");break;}
     ((void(*)(U,Rec*,U,U,U,unsigned))(game_base+0x081b4150))
-      (eval,&team,result.node+8,r->rbp+0x18,r->rbp-0x18,0);
+      (eval,&team,result.node+8,r->rbp+0x18,r->rbp-0x18,0);cache_note_write();
     release(team);
     log_line("NSD_HS_TEAM_END,%u,%u",pass+1,tid);
    }

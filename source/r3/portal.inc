@@ -98,6 +98,9 @@ static int native_recruit_eligible(U eval,Rec team,Rec recruit) {
  if(!matches(desc,player_type) && !matches(desc,recruit_type)) {
   portal_fault("eligibility_record_type");return 0;
  }
+ /* Cache stack (cache_elig.inc): fast returns a valid memo answer; shadow calls the native and compares. */
+ int memo_cached=-1;unsigned memo_gen=0;int memo_slot=elig_memo_begin(eval,team,recruit,&memo_cached,&memo_gen);
+ if(memo_slot>=0 && memo_cached>=0 && cache_fast())return memo_cached;
  NativeEligibilityReason reason={0};reason.data[15]=15;int allowed=0;
  Rec prev_eval=rc4_evaluating;rc4_evaluating=rc4_member(recruit)?recruit:0;
  __try {
@@ -117,6 +120,7 @@ static int native_recruit_eligible(U eval,Rec team,Rec recruit) {
   } __finally {
    rc4_evaluating=prev_eval;native_eligibility_reason_release(&reason);}
  } __except(native_eligibility_exception(GetExceptionInformation())) {return 0;}
+ elig_memo_end(memo_slot,memo_cached,memo_gen,allowed,team,recruit);
  return allowed;
 }
 /* Native NSD appends a signing to a per-team temporary vector before publishing
@@ -222,6 +226,7 @@ static void portal_note_owner(Rec recruit,Rec team,U context,const char *site,in
  else log_line("PORTAL_SIGN_PENDING,%s,%u,%u,AWAIT_NATIVE_SIGNED",site,tid,row(recruit));
 }
 static void portal_note_signing(Rec recruit,Rec team,U context,const char *site) {portal_note_owner(recruit,team,context,site,0);}
+#include "cache_scans.inc"
 #include "portal_integrity.inc"
 /* A published acquisition can still have a stale Top10/SoftCommitted stage in
    loaded saves. It is already owned, not a new recruiting opportunity. Preserve
@@ -359,15 +364,9 @@ static int portal_players(PortalRoster *s,int rooms,Rec team,int ordinal,int ret
  }
  release(a);return ok;
 }
-static int portal_commits(PortalRoster *s,int rooms,Rec franchise,Rec team,int ordinal,int portal,U context,PortalRoomIssue *issue) {
- const char *source=portal?"PORTAL_COMMITMENTS":"HS_COMMITMENTS";
- Rec a=array_field(franchise,ordinal);if(!a)return portal_room_issue(issue,source,-1);
- U n=array_count(a);if(n>12000){release(a);return portal_room_issue(issue,source,-1);}
+/* The per-entry body of portal_commits (unchanged; ok starts at 1). */
+static int portal_commits_entry(PortalRoster *s,int rooms,Rec team,Rec r,unsigned stage,int portal,U context,PortalRoomIssue *issue) {
  int ok=1;
- for(U i=0;i<n;i++) {
-  Rec r=array_at(a,i);if(!r){ok=portal_room_issue(issue,source,(int)i);break;}
-  unsigned stage=scalar(r,9,0x108);
-  if(stage==5 || stage==6) {
    Rec p=reference(r,5);if(!p) ok=0;
    else {
     int owns=0,tid=-1;
@@ -387,9 +386,46 @@ static int portal_commits(PortalRoster *s,int rooms,Rec franchise,Rec team,int o
     if(ok && owns)ok=portal_add_many(s,rooms,p,portal,stage==6,portal);
     release(p);
    }
+ return ok;
+}
+static int portal_commits(PortalRoster *s,int rooms,Rec franchise,Rec team,int ordinal,int portal,U context,PortalRoomIssue *issue) {
+ const char *source=portal?"PORTAL_COMMITMENTS":"HS_COMMITMENTS";
+ Rec a=array_field(franchise,ordinal);if(!a)return portal_room_issue(issue,source,-1);
+ U n=array_count(a);if(n>12000){release(a);return portal_room_issue(issue,source,-1);}
+ int ok=1;
+ /* Cache stack (cache_scans.inc): as hs15_secured. */
+ SecuredList *c=cache_scan_ready()?secured_list_get(franchise,a,n,context,ordinal):0;
+ if(c && cache_fast()) {
+  CacheCount *k=&cache_counts[CACHE_COMMITS_LIST];k->queries++;k->hits++;
+  for(unsigned i=0;i<c->count && ok;i++) {
+   Rec r=array_at(a,c->idx[i]);if(!r){k->stale++;ok=portal_room_issue(issue,source,(int)c->idx[i]);break;}
+   unsigned stage=scalar(r,9,0x108);
+   if(stage==5 || stage==6)ok=portal_commits_entry(s,rooms,team,r,stage,portal,context,issue);
+   else k->stale++;
+   if(!ok)portal_room_issue(issue,source,(int)row(r));
+   release(r);
+  }
+  if(ok && c->null_at<n)ok=portal_room_issue(issue,source,(int)c->null_at);
+  release(a);return ok;
+ }
+ unsigned live_count=0;int same=1,null_stop=0;U stop=n;
+ for(U i=0;i<n;i++) {
+  Rec r=array_at(a,i);if(!r){ok=portal_room_issue(issue,source,(int)i);stop=i;null_stop=1;break;}
+  unsigned stage=scalar(r,9,0x108);
+  if(stage==5 || stage==6) {
+   if(c && (live_count>=c->count || c->idx[live_count]!=(uint32_t)i))same=0;
+   live_count++;
+   ok=portal_commits_entry(s,rooms,team,r,stage,portal,context,issue);
   }
   if(!ok)portal_room_issue(issue,source,(int)row(r));
-  release(r);if(!ok) break;
+  release(r);if(!ok){stop=i;break;}
+ }
+ if(c) {
+  CacheCount *k=&cache_counts[CACHE_COMMITS_LIST];k->queries++;k->hits++;k->compares++;
+  if(!secured_list_same(c,same,live_count,stop,null_stop,n) && cache_mismatch(CACHE_COMMITS_LIST))
+   log_line("CACHE_STACK_MISMATCH,COMMITS_LIST,%s,list=%d,team=%u,n=%llu,live=%u,cached=%u,stop=%llu,null_stop=%d,cached_null=%llu",
+    cache.site?cache.site:"-",ordinal,scalar(team,383,0x100),(unsigned long long)n,live_count,c->count,(unsigned long long)stop,null_stop,
+    (unsigned long long)c->null_at);
  }
  release(a);return ok;
 }
@@ -427,7 +463,9 @@ static int portal_roster_finish(PortalRoster *s,int step) {
  s->role=s->count?v->rating[(s->starters<s->count?s->starters:s->count)-1]:0;
  return 1;
 }
-static int portal_rosters_collect(PortalRoster *s,int rooms,Rec team,U context,int single_pos,PortalRoomIssue *issue) {
+#include "cache_room.inc"
+/* The room itself (unchanged). */
+static int portal_rosters_collect_live(PortalRoster *s,int rooms,Rec team,U context,int single_pos,PortalRoomIssue *issue) {
  static const int fields[POSITIONS]={5,2,1,9,8,4,3,0,6,7,3,6,1,4,5,7,0,2,8,1,6,4};
  if((rooms!=1 && rooms!=POSITIONS) || (rooms==1 && (single_pos<0 || single_pos>=POSITIONS)))
   return portal_room_issue(issue,"POSITION",single_pos);
@@ -591,6 +629,7 @@ static Rec portal_leader(Rec recruit,U context) {
  return team;
 }
 int DriOnPortalStars(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return 0;
  __try {
   Rec p=(Rec)q(r->rdx);if(!p){portal_fault("star_player");return 0;}
@@ -600,7 +639,7 @@ int DriOnPortalStars(Registers *r) {
   log_line("PORTAL_STAR,%u,%d,%d,%d,%d,%d,%s",row(p),pos,year,ovr,old+1,star+1,mode?"APPLIED":"WOULD_APPLY");
   if(!mode)return 0;
   U t=q((U)p+0x10),f=field(schema(p),231);
-  ((void(*)(U,uint32_t,U,int))q(q(t)+0x148))(t,row(p),f,star);
+  ((void(*)(U,uint32_t,U,int))q(q(t)+0x148))(t,row(p),f,star);cache_note_write();
   ((void(*)(U))(game_base+0x080595e0))(t);
   if(scalar(p,231,0x108)!=(unsigned)star){portal_fault("star_write");return 0;}
   return 1;
@@ -609,6 +648,7 @@ int DriOnPortalStars(Registers *r) {
 /* Called immediately after the native transition condition. A veto makes the
    original condition false, so its existing loop cleanup runs normally. */
 void DriOnPortalWeekly(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted || !(r->rax&255))return;
  __try {
   U sp=(U)(r+1);Rec transition=(Rec)q(sp+0x38);
@@ -616,7 +656,10 @@ void DriOnPortalWeekly(Registers *r) {
   Rec recruit=(Rec)q(r->rbp+0x68);if(!recruit)return;
   U context=q(r->rbp+0x60);Rec team=portal_leader(recruit,context);
   if(!team){portal_fault("weekly_leader");return;}
+  /* Cache stack: this callback's acceptance decision is one window (closed before any write of the callback). */
+  int window=cache_callback_window("PORTAL_WEEKLY",context);
   int blocked=cpu_recruit_decision(recruit,team,context,"WEEKLY",1);
+  cache_callback_window_end(window);
   if(faulted || mode<0){release(team);return;}
   if(!blocked && transfer_recruit(recruit)) {
    int offer=portal_active_offer(recruit,team);
@@ -632,6 +675,7 @@ void DriOnPortalWeekly(Registers *r) {
    uses the original failed-condition cleanup; accepted ownership is observed
    before publication and counted only after the native stage actually changes. */
 int DriOnHsOwnership(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return 0;
  __try {
   U sp=(U)(r+1);Rec transition=(Rec)q(sp+0x38);
@@ -644,7 +688,10 @@ int DriOnHsOwnership(Registers *r) {
   if(next!=5 && next!=6)return 0;
   Rec team=portal_leader(recruit,context);
   if(!team){portal_fault("HS_transition_leader");return 0;}
+  /* Cache stack: this callback's acceptance decision is one window (closed before any write of the callback). */
+  int window=cache_callback_window("HS_WEEKLY",context);
   int blocked=cpu_recruit_decision(recruit,team,context,"HS_WEEKLY",1);
+  cache_callback_window_end(window);
   if(next==5 && scalar(recruit,9,0x108)<5 && !blocked && !faulted){
    int offer=portal_active_offer(recruit,team);
    if(offer<0)portal_fault("HS_transition_offer");
@@ -662,12 +709,14 @@ int DriOnHsOwnership(Registers *r) {
    hides native ownership and before Team.CommittedPlayers is published.
    No policy veto or stage write; the ledger is used only after native signing. */
 void DriOnBulkOwnership(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   portal_note_signing((Rec)q(r->rbp-0x19),(Rec)r->r12,r->r13,"SIGN_BULK");
  } __except(fail_exception("bulk_signing_owner",GetExceptionCode())){}
 }
 int DriOnPortalInstant(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return 0;
  __try {
   Rec recruit=(Rec)q(r->rbp-0x41),team=(Rec)q(q(r->rbp+0x77));U context=q(r->rbp+0x67);
@@ -687,6 +736,7 @@ int DriOnPortalInstant(Registers *r) {
 }
 /* Before native NSD inserts a soft commitment into its destination map. */
 int DriOnPortalBulkGuard(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return 0;
  __try {
   Rec recruit=(Rec)q(r->rbp-0x19),team=(Rec)r->r12;U context=r->r13;
@@ -710,6 +760,7 @@ int DriOnPortalBulkGuard(Registers *r) {
  } __except(fail_exception("bulk_guard",GetExceptionCode())){return 0;}
 }
 int DriOnPortalSigning(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return 0;
  __try {
   Rec recruit=(Rec)q((U)(r+1)+0x30),team=(Rec)r->rbx;U context=q(r->rbp+0x57);
@@ -721,6 +772,7 @@ int DriOnPortalSigning(Registers *r) {
  __except(fail_exception("portal_signing",GetExceptionCode())){return 0;}
 }
 int DriOnPortalDeadline(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  /* Moved guard includes native null-winner branch, including diagnostic mode. */
  if(mode<0 || faulted)return r->r15?0:-1;
  __try {
@@ -749,16 +801,22 @@ static void portal_prune(Rec team,U eval) {
  Rec held[MAX_BOARD]={0};
  for(U i=0;i<n;i++){Rec t=array_at(a,i);if(t){held[i]=reference(t,10);release(t);}}
  release(a);
+ /* Cache stack: this school's board decisions are one window, closed before every native removal and opened
+    again after it. */
+ int window=cache_callback_window("START_PRUNE",eval);
  for(U i=0;i<n;i++) {
   Rec recruit=held[i];if(!recruit)continue;
   int blocked=!faulted && mode>=0?cpu_recruit_decision(recruit,team,eval,"BOARD",0):0;
   /* Recheck after decoding: a fault must never become a destructive removal. */
   if(blocked && !faulted && mode==1) {
+   cache_callback_window_end(window);window=0;
    U candidate[6]={(U)recruit,0,0,0,0,0};
-   int rc=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(q(eval+0xc8),&team,candidate);
+   int rc=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(q(eval+0xc8),&team,candidate);cache_note_removal();
    log_line("PORTAL_DROP,%u,%u,%d",scalar(team,383,0x100),row(recruit),rc);
    if(rc)portal_fault("native_remove");
+   window=cache_callback_window("START_PRUNE",eval);
   }
   release(recruit);
  }
+ cache_callback_window_end(window);
 }

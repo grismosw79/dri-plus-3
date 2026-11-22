@@ -90,14 +90,9 @@ static int hs15_team_players(Hs15Snapshot *s,Rec team,int ordinal,int returning,
  }
  release(a);return ok;
 }
-static int hs15_secured(Hs15Snapshot *s,Rec franchise,Rec team,U eval,int ordinal,int portal) {
- Rec a=array_field(franchise,ordinal);if(!a)return 0;
- U n=array_count(a);if(n>12000){release(a);return 0;}
- unsigned tid=scalar(team,383,0x100);int ok=1;
- for(U j=0;j<n;j++) {
-  Rec r=array_at(a,j);if(!r){ok=0;break;}
-  unsigned stage=scalar(r,9,0x108);
-  if(stage==5 || stage==6) {
+/* The per-entry body of hs15_secured (unchanged; ok starts at 1). */
+static int hs15_secured_entry(Hs15Snapshot *s,Rec r,unsigned stage,Rec team,unsigned tid,U eval,int portal) {
+ int ok=1;
    Rec p=reference(r,5);if(!p)ok=0;
    else {
     int owns=0,owner=-1;
@@ -115,12 +110,51 @@ static int hs15_secured(Hs15Snapshot *s,Rec franchise,Rec team,U eval,int ordina
     if(ok && owns)ok=hs15_add(s,p,0,portal,!portal,0);
     release(p);
    }
+ return ok;
+}
+static int hs15_secured(Hs15Snapshot *s,Rec franchise,Rec team,U eval,int ordinal,int portal) {
+ Rec a=array_field(franchise,ordinal);if(!a)return 0;
+ U n=array_count(a);if(n>12000){release(a);return 0;}
+ unsigned tid=scalar(team,383,0x100);int ok=1;
+ /* Cache stack (cache_scans.inc): fast visits only the cached stage-5/6 entries, in order, then fails where the
+    loop would have met the first unreadable entry; shadow runs the loop and compares. */
+ SecuredList *c=cache_scan_ready()?secured_list_get(franchise,a,n,eval,ordinal):0;
+ if(c && cache_fast()) {
+  CacheCount *k=&cache_counts[CACHE_SECURED_LIST];k->queries++;k->hits++;
+  for(unsigned i=0;i<c->count && ok;i++) {
+   Rec r=array_at(a,c->idx[i]);if(!r){ok=0;break;}
+   unsigned stage=scalar(r,9,0x108);
+   if(stage==5 || stage==6)ok=hs15_secured_entry(s,r,stage,team,tid,eval,portal);
+   else k->stale++;
+   release(r);
   }
-  release(r);if(!ok)break;
+  if(ok && c->null_at<n)ok=0;
+  release(a);return ok;
+ }
+ unsigned live_count=0;int same=1,null_stop=0;U stop=n;
+ for(U j=0;j<n;j++) {
+  Rec r=array_at(a,j);if(!r){ok=0;stop=j;null_stop=1;break;}
+  unsigned stage=scalar(r,9,0x108);
+  if(stage==5 || stage==6) {
+   if(c && (live_count>=c->count || c->idx[live_count]!=(uint32_t)j))same=0;
+   live_count++;
+   ok=hs15_secured_entry(s,r,stage,team,tid,eval,portal);
+  }
+  release(r);if(!ok){stop=j;break;}
+ }
+ if(c) {
+  CacheCount *k=&cache_counts[CACHE_SECURED_LIST];k->queries++;k->hits++;k->compares++;
+  if(!secured_list_same(c,same,live_count,stop,null_stop,n) && cache_mismatch(CACHE_SECURED_LIST))
+   log_line("CACHE_STACK_MISMATCH,SECURED_LIST,%s,list=%d,team=%u,n=%llu,live=%u,cached=%u,stop=%llu,null_stop=%d,cached_null=%llu",
+    cache.site?cache.site:"-",ordinal,tid,(unsigned long long)n,live_count,c->count,(unsigned long long)stop,null_stop,(unsigned long long)c->null_at);
  }
  release(a);return ok;
 }
-static int hs15_collect(Hs15Snapshot *s,Rec team,U eval) {
+static int hs15_collect_live(Hs15Snapshot *s,Rec team,U eval);
+#include "cache_snapshot.inc"
+static int hs15_collect(Hs15Snapshot *s,Rec team,U eval){return snapshot_memo_collect(s,team,eval);}
+/* The snapshot itself (unchanged). */
+static int hs15_collect_live(Hs15Snapshot *s,Rec team,U eval) {
  static const int fields[POSITIONS]={5,2,1,9,8,4,3,0,6,7,3,6,1,4,5,7,0,2,8,1,6,4};
  memset(s,0,sizeof(*s));
  s->prestige=(int)scalar(team,384,0x100);

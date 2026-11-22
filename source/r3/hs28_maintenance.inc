@@ -5,6 +5,7 @@ typedef struct {
  int valid;
 } Hs28MaintenanceScope;
 static Hs28MaintenanceScope hs28_maintenance_scope;
+static void hs28_maintenance_body(U eval,const Hs28MaintenanceScope *nowp,Hs28MaintenanceScope *old);
 static void hs28_maintenance(U eval) {
  if(mode!=1 || faulted || !hs28_pair_window(eval))return;
  Rec f=context_ref(eval,6),season=f?reference(f,44):0,teams=f?array_field(f,45):0;
@@ -16,9 +17,18 @@ static void hs28_maintenance(U eval) {
  if(old->valid && old->franchise_table==now.franchise_table && old->team_table==now.team_table &&
     old->eval==now.eval && old->franchise_row==now.franchise_row && old->year==now.year &&
     old->week==now.week && old->type==now.type)return;
+ /* Cache stack: the whole block is one window, with the season values just read. The body is the original
+    sequence; each step ends with a sub-phase boundary. */
+ int window=cache_season_window(eval,now.franchise_table,now.franchise_row,now.year,now.week,now.type,"MAINT");
+ __try {
+  hs28_maintenance_body(eval,&now,old);
+ } __finally {cache_season_window_end(window);}
+}
+static void hs28_maintenance_body(U eval,const Hs28MaintenanceScope *nowp,Hs28MaintenanceScope *old) {
+ const Hs28MaintenanceScope now=*nowp;
  /* A later school's board may contain a recruit reopened by an earlier
     scan. Capture all matching roles before the first such native change. */
- hs34r4_preload(eval);if(faulted)return;
+ hs34r4_preload(eval);cache_phase_boundary();if(faulted)return;
  hs28_nsd_reset();
  HsCleanupTrace trace={"begin",now.year,now.type,now.week,-1,-1,-1};
  HsCleanupTrace *previous=hs_cleanup_trace;
@@ -27,11 +37,12 @@ static void hs28_maintenance(U eval) {
   __try {hs28_cleanup_rivals(0,eval);}
   __except(hs_cleanup_exception(&trace,GetExceptionCode())) {}
  } __finally {hs_cleanup_trace=previous;}
+ cache_phase_boundary();
  if(faulted)return;
- hs29_reopen_uncommittable(eval,"PRE_PLAN");if(faulted)return;
- hs28_coverage_begin(eval);if(faulted)return;
- hs28_recover_market(eval,"PRE_PLAN");if(faulted)return;
- hs32_crowding_begin(eval);if(faulted)return;
+ hs29_reopen_uncommittable(eval,"PRE_PLAN");cache_phase_boundary();if(faulted)return;
+ hs28_coverage_begin(eval);cache_phase_boundary();if(faulted)return;
+ hs28_recover_market(eval,"PRE_PLAN");cache_phase_boundary();if(faulted)return;
+ hs32_crowding_begin(eval);cache_phase_boundary();if(faulted)return;
  *old=now;
  log_line("HS28_MAINTENANCE,%u,%u,%u,COMPLETE",now.year,now.type,now.week);
 }

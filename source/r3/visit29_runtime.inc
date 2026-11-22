@@ -4,10 +4,12 @@
 U ResumeVisit29Capacity,ResumeVisit29Dates,SkipVisit29Dates,ResumeVisit29Booked,NativeVisit29Account;
 extern void HookVisit29Capacity(void),HookVisit29Dates(void),HookVisit29Booked(void);
 void DriOnVisit29Capacity(Registers *r) {
+    cache_hook_entry(CACHE_HOOK_OTHER);
     if(mode!=1 || faulted)return;
     r->rsi=(uint32_t)visit29_capacity((int32_t)r->rsi);
 }
 void DriOnVisit29Dates(Registers *r) {
+    cache_hook_entry(CACHE_HOOK_OTHER);
     if(mode<0 || faulted)return;
     __try {
         U begin=q(r->rbp-0x11),end=q(r->rbp-9),eval=r->r15;
@@ -29,6 +31,7 @@ void DriOnVisit29Dates(Registers *r) {
     } __except(fail_exception("visit29_dates",GetExceptionCode())) {}
 }
 void DriOnVisit29Booked(Registers *r) {
+    cache_hook_entry(CACHE_HOOK_OTHER);
     if(mode<0 || faulted || (int32_t)r->r12<=0)return;
     __try {
         Rec team=(Rec)q(q(r->rbp+0x67)),target=(Rec)q(q(r->rbp+0x6f));
@@ -52,6 +55,7 @@ __declspec(dllexport) void DriTestVisit29ObserveHooks(U *out) {
 }
 #endif
 void DriOnVisit29Eligible(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_TEAM);offer_cap_team((const Rec *)r->r15);
  if(mode<0 || faulted || !(r->rax&255))return;
  __try {
   Rec team=(Rec)q(r->r15),target=(Rec)q(r->rsi);U eval=r->rbx;
@@ -63,6 +67,7 @@ void DriOnVisit29Eligible(Registers *r) {
  } __except(fail_exception("visit29_eligible",GetExceptionCode())) {}
 }
 void DriOnVisit29Completed(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode<0 || faulted)return;
  __try {
   Rec team=(Rec)q(q(r->rbp+0x78)),target=(Rec)q(r->r12);U eval=r->r14;

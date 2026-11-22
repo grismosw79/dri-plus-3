@@ -20,7 +20,9 @@ static SRWLOCK pt28_lock=SRWLOCK_INIT;
 static volatile LONG pt28_epoch=1;
 static volatile LONG pt28_wait_logs=0;
 static struct {U table;uint32_t id;int year,week,type,stage,offseason;unsigned samples[2][22];} pt28_log_scope;
-static void pt28_invalidate(void){InterlockedIncrement(&pt28_epoch);}
+/* Cache stack: content hash of the last pt28_read_departures result (pt28_roster_cache.inc). */
+static uint64_t pt28_departures_hash;
+static void pt28_invalidate(void){InterlockedIncrement(&pt28_epoch);cache_note_pt28();}
 static void pt28_reset(void){
  memset(&pt28_index,0,sizeof(pt28_index));
 }
@@ -56,7 +58,7 @@ static int pt28_ledger_owner(Rec recruit,Rec player){
 static int pt28_read_departures(Rec franchise){
  /* A missing/unpopulated PLV evaluator is legitimate before PLV starts.
     Once the array exists, malformed entries remain a hard validation failure. */
- PortalDepartures *d=&pt28_index.departed;memset(d,0,sizeof(*d));
+ PortalDepartures *d=&pt28_index.departed;memset(d,0,sizeof(*d));pt28_departures_hash=1469598103934665603ull;
  Rec fe=reference(franchise,9);if(!fe)return 1;
  Rec pl=reference(fe,13);release(fe);if(!pl)return 1;
  Rec a=array_field(pl,7);release(pl);if(!a)return 1;
@@ -68,7 +70,7 @@ static int pt28_read_departures(Rec franchise){
    Rec p=reference(e,4);if(!p){release(e);ok=0;break;}
    U table=q((U)p+0x10);
    if(d->table&&d->table!=table){release(p);release(e);ok=0;break;}
-   d->table=table;d->ids[d->count++]=row(p);release(p);
+   d->table=table;d->ids[d->count++]=row(p);pt28_departures_hash=(pt28_departures_hash^row(p))*1099511628211ull;release(p);
   }release(e);
  }release(a);return ok;
 }
@@ -128,9 +130,27 @@ static int pt28_player(Rec player,int incoming,Pt28Player *p){
  p->redshirt=scalar(player,234,0x108)==2;p->arrival_delay=0;p->rostered=0;
  return p->pos>=0&&p->pos<22&&p->ovr>=0&&p->ovr<=99&&p->year>=0&&p->year<=3;
 }
+/* Cache stack: Position, OVR and class year first (the validity check pt28_player applies to every player), then
+   previous team, team and redshirt only for the candidate's group. The same getters return the same values; a
+   player outside the group was discarded after those reads anyway. */
+static int pt28_add_player_lazy(Rec player,int incoming,int group,Pt28Player *p,int *in_group) {
+ int pos=(int)scalar(player,3,0x108),ovr=(int)scalar(player,191,0x100),year=(int)scalar(player,242,0x108);
+ *in_group=0;
+ if(!(pos>=0&&pos<22&&ovr>=0&&ovr<=99&&year>=0&&year<=3))return 0;
+ if(pt28_group(pos)!=group)return 1;
+ unsigned previous=scalar(player,230,0x100),current=scalar(player,261,0x100);
+ p->table=q((U)player+0x10);p->id=row(player);p->pos=pos;p->ovr=ovr;p->year=year;
+ p->hs=previous==255&&(current==255||incoming);p->develop=!p->hs;
+ p->redshirt=scalar(player,234,0x108)==2;p->arrival_delay=0;p->rostered=0;
+ *in_group=1;return 1;
+}
 static int pt28_add(Pt28Room *room,Rec player,int incoming,int group,int hs_override){
- Pt28Player p;if(!pt28_player(player,incoming,&p))return 0;
- if(pt28_group(p.pos)!=group)return 1;
+ Pt28Player p;
+ if(cache_on()){int in_group;if(!pt28_add_player_lazy(player,incoming,group,&p,&in_group))return 0;if(!in_group)return 1;}
+ else {
+  if(!pt28_player(player,incoming,&p))return 0;
+  if(pt28_group(p.pos)!=group)return 1;
+ }
  if(hs_override>=0){p.hs=hs_override;p.develop=!hs_override;}
  p.rostered=!incoming;
  for(int i=0;i<room->count;i++)if(room->players[i].table==p.table&&room->players[i].id==p.id){
@@ -166,6 +186,7 @@ static int pt28_roster_array(Pt28Room *room,Rec team,int ordinal,int incoming,in
   release(p);if(!ok)break;
  }release(a);return ok;
 }
+#include "pt28_roster_cache.inc"
 static int pt28_read_pending(Pt28Room *room,Rec recruit,Rec team,int group,int offered,const PortalSign *accepted){
  unsigned stage=scalar(recruit,9,0x108);if(stage!=5&&stage!=6)return 1;
  unsigned klass=scalar(recruit,2,0x108);if(klass>7)return 0;
@@ -258,8 +279,13 @@ static Rec pt28_raw_ref(Rec r,unsigned n){
    completion. The training appointment becomes active after its StartEvent.
    The blocking training transaction holds the scheduler off the stopping
    lattice until every team has progressed. All reads are persisted facts. */
+static int pt28_checkpoint_fields(Rec franchise,Rec season,int stage,int offseason);
 static int pt28_checkpoint(Rec franchise,Rec season){
  int stage=(int)scalar(season,3,0x108),offseason=(int)scalar(season,8,0x100);
+ return pt28_checkpoint_fields(franchise,season,stage,offseason);
+}
+/* The checkpoint with the two season fields its caller read (the same two reads, in the same order). */
+static int pt28_checkpoint_fields(Rec franchise,Rec season,int stage,int offseason){
  if(stage!=2||offseason!=8)return 1;
  if(scalar(season,4,0x100)!=7)return 0;
  Rec fe=reference(franchise,9),manager=fe?reference(fe,20):0;
@@ -350,7 +376,7 @@ static int pt28_grade_impl(U context,Rec team,Rec player,int *grade,Pt28Result *
  Pt28Player candidate;
  if(!ok||!pt28_player(player,pt28_published_owner(player)>=0,&candidate)){release(franchise);return 0;}
  Pt28Room room;memset(&room,0,sizeof(room));int group=pt28_group(candidate.pos);
- ok=pt28_jobs(team,group,&room)&&pt28_roster_array(&room,team,239,0,group,stage==2)&&
+ ok=pt28_jobs(team,group,&room)&&pt28_roster_cached(&room,team,group,stage==2)&&
     pt28_roster_array(&room,team,33,1,group,0)&&pt28_board(&room,franchise,team,group);
  release(franchise);if(!ok)return 0;
  if(delay_hs)for(int i=0;i<room.count;i++){
@@ -370,25 +396,35 @@ static int pt28_grade_impl(U context,Rec team,Rec player,int *grade,Pt28Result *
  }
  *grade=result.grade;if(details)*details=result;return 1;
 }
-static int pt28_grade(U context,Rec team,Rec player,int *grade){
- if(!context||!team||!player||!grade)return 0;
+#include "pt28_grade_reads.inc"
+/* franchise/season: the ready check's references (cache stack fast) or 0; ftable/frow: its franchise identity
+   (shadow compare). */
+static int pt28_grade(U context,Rec team,Rec player,int *grade,Rec franchise,Rec season,U ftable,uint32_t frow){
+ if(!context||!team||!player||!grade){release(season);release(franchise);return 0;}
  int ok=0;AcquireSRWLockExclusive(&pt28_lock);
- __try {ok=pt28_grade_impl(context,team,player,grade,0);}
+ __try {ok=cache_on()?pt28_grade_once(context,team,player,grade,0,franchise,season,ftable,frow):pt28_grade_impl(context,team,player,grade,0);}
  __except(fail_exception("PT28_grade",GetExceptionCode())){ok=0;}
  ReleaseSRWLockExclusive(&pt28_lock);
  if(ok==0&&!faulted)portal_fault("PT28_inputs");return ok==1&&!faulted&&mode==1;
 }
 int DriPt28Grade(U context,Rec *team,Rec *player){
+ cache_hook_entry(CACHE_HOOK_GRADE);
  if(mode==1&&!faulted&&team&&*team&&player&&*player){
-  int ready=0;
+  int ready=0;Rec held_franchise=0,held_season=0;U ready_table=0;uint32_t ready_row=0;
   __try {
    /* Native UI initialization can request a grade before a Dynasty/SeasonInfo
       exists. Match the explicit league-start gate used by the EPS dispatcher. */
    Rec franchise=context?context_ref(context,2):0;
    Rec season=franchise?reference(franchise,44):0;
-   ready=season&&scalar(season,24,0xf8);release(season);release(franchise);
+   ready=season&&scalar(season,24,0xf8);
+   /* Cache stack (pt28_grade_reads.inc): fast hands both references to the grade; shadow compares the identity. */
+   if(ready && cache_fast()){held_franchise=franchise;held_season=season;}
+   else {
+    if(ready && franchise && cache_shadow()){ready_table=q((U)franchise+0x10);ready_row=row(franchise);}
+    release(season);release(franchise);
+   }
   }__except(fail_exception("PT28_ready",GetExceptionCode())){ready=0;}
-  if(ready){int grade;if(pt28_grade(context,*team,*player,&grade))return grade;}
+  if(ready){int grade;if(pt28_grade(context,*team,*player,&grade,held_franchise,held_season,ready_table,ready_row))return grade;}
  }
  return NativePt28Grade(context,team,player);
 }

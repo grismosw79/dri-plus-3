@@ -1,5 +1,8 @@
 """Production checkpoint file operations with fault-injected Win32 services.
 Checks ordering, complete reads, atomic replacement, and handles; not live Windows.
+The writer keeps its temp file, complete-write check and MOVEFILE_REPLACE_EXISTING rename, and leaves
+write-back to Windows: no FlushFileBuffers call and no MOVEFILE_WRITE_THROUGH. The FlushFileBuffers mock
+stays so that a writer that flushes again is caught (flush must stay 0).
 """
 from pathlib import Path
 import os,subprocess,json
@@ -37,15 +40,15 @@ static int GetFileSizeEx(HANDLE h,LARGE_INTEGER *s){assert(h==GENERIC_READ);s->Q
 static int ReadFile(HANDLE h,void *p,DWORD n,DWORD *got,void *o){(void)o;assert(h==GENERIC_READ&&n==sizeof(final));memcpy(p,final,n);*got=fail==6?n-1:n;return fail!=5;}
 static int WriteFile(HANDLE h,const void *p,DWORD n,DWORD *put,void *o){(void)o;assert(h==GENERIC_WRITE&&n==sizeof(temp));memcpy(temp,p,n);*put=fail==8?n-1:n;return fail!=7;}
 static int CloseHandle(HANDLE h){assert(h==1||h==2);handles--;return 1;}
-static int FlushFileBuffers(HANDLE h){assert(h==GENERIC_WRITE);flush++;return fail!=9;}
-static int MoveFileExW(const wchar_t *a,const wchar_t *b,int flags){assert(!handles&&flush==1&&flags==3&&wcsstr(a,L".tmp")&&!wcsstr(b,L".tmp"));if(fail==10)return 0;memcpy(final,temp,sizeof(final));filesize=sizeof(final);renamed++;return 1;}
+__attribute__((unused)) static int FlushFileBuffers(HANDLE h){assert(h==GENERIC_WRITE);flush++;return fail!=9;}
+static int MoveFileExW(const wchar_t *a,const wchar_t *b,int flags){assert(!handles&&!flush&&flags==MOVEFILE_REPLACE_EXISTING&&wcsstr(a,L".tmp")&&!wcsstr(b,L".tmp"));if(fail==10)return 0;memcpy(final,temp,sizeof(final));filesize=sizeof(final);renamed++;return 1;}
 static int DeleteFileW(const wchar_t *p){assert(!handles&&wcsstr(p,L".tmp"));deleted++;return 1;}
 '''+body+r'''
 int main(void){
  Hs34R3Disk d={0},out;d.league=123;d.year=2026;d.tid=55;d.board_hash=1234;
- assert(hs34r3_write(&d)&&renamed==1&&!handles&&flush==1&&!deleted);
+ assert(hs34r3_write(&d)&&renamed==1&&!handles&&!flush&&!deleted);
  assert(hs34r3_read(&out,&d)&&!memcmp(&out,&d,sizeof(d))&&!handles);
- for(int f=1;f<=10;f++){
+ for(int f=1;f<=10;f++){if(f==9)continue; /* f=9 failed the flush, which the writer no longer calls */
   fail=f;flush=renamed=deleted=0;memset(final,0x42,sizeof(final));
   if(f<=3||f>=7){assert(!hs34r3_write(&d)&&!handles&&!renamed);for(size_t i=0;i<sizeof(final);i++)assert(final[i]==0x42);if(f>=7)assert(deleted==1);}
   if(f<=6)assert(!hs34r3_read(&out,&d)&&!handles);
@@ -57,5 +60,5 @@ int main(void){
 (O/'cache_io.c').write_text(c)
 subprocess.run(['gcc','-std=c11','-O2','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-I'+str(S),str(O/'cache_io.c'),'-o',str(O/'cache_io')],check=True)
 subprocess.run([str(O/'cache_io')],check=True)
-r={'passed':True,'production_file_functions_executed':True,'win32_services_modeled':True,'checks':['Exact board-key path','Only a complete flushed temp file replaces the checkpoint','Ten injected API/partial-transfer failures do not replace prior checkpoint','Short and oversized files rejected','All opened handles closed'],'live_game_verified':False}
+r={'passed':True,'production_file_functions_executed':True,'win32_services_modeled':True,'checks':['Exact board-key path','Only a complete temp file replaces the checkpoint, with a plain atomic rename and no forced flush','Nine injected API/partial-transfer failures do not replace prior checkpoint','Short and oversized files rejected','All opened handles closed'],'live_game_verified':False}
 (O/'test34_r3_cache_io_results.json').write_text(json.dumps(r,indent=2)+'\n');print(json.dumps(r))

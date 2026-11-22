@@ -13,12 +13,12 @@ static int r2_hs_add(Rec team,Rec recruit,U eval,int score) {
   Hs28RecoveryTeam *cache=&hs28_recovery_teams[tid];
   if(!r2_hs_requested(recruit,team,eval) || !cache->valid || !r2_hs_spares(team,eval,cache->plan,cache->n,&old))return 0;
   U candidate[6]={(U)old,0,0,0,0,0};
-  int rc=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);
+  int rc=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);cache_note_removal();
   board=board_array(team);U size=board?array_count(board):51;release(board);
   if(rc || size!=49){if(size!=50)portal_fault("R2_HS_exchange_remove");release(old);return 0;}
  }
  struct {U rec;int32_t values[10];} candidate={(U)recruit,{0}};candidate.values[8]=score;
- int rc=((int(*)(U,Rec*,void*))(game_base+0x081496c0))(manager,&team,&candidate);
+ int rc=((int(*)(U,Rec*,void*))(game_base+0x081496c0))(manager,&team,&candidate);cache_note_write();
  Rec added=t36_target(team,recruit);
  board=board_array(team);U after=board?array_count(board):51;release(board);
  int ok=!rc && added && after==(old?before:before+1);release(added);
@@ -26,7 +26,7 @@ static int r2_hs_add(Rec team,Rec recruit,U eval,int score) {
   candidate.rec=(U)old;candidate.values[8]=0;
   for(int i=0;i<hs28_recovery_teams[tid].n;i++)if(hs28_identity(&hs28_recovery_teams[tid].plan[i],old))
     candidate.values[8]=hs28_recovery_teams[tid].plan[i].native_score;
-  int restored=((int(*)(U,Rec*,void*))(game_base+0x081496c0))(manager,&team,&candidate);
+  int restored=((int(*)(U,Rec*,void*))(game_base+0x081496c0))(manager,&team,&candidate);cache_note_write();
   Rec back=t36_target(team,old);if(restored || !back)portal_fault("R2_HS_exchange_restore");release(back);
  }else if(!ok && (!rc || after>50))portal_fault("R2_HS_exchange_add");
  log_line("R2_HS_BOARD,%u,%u,%d,%u,%u,%d,%d,%d",tid,row(recruit),old?(int)row(old):-1,(unsigned)before,(unsigned)after,ask,wallet,ok);

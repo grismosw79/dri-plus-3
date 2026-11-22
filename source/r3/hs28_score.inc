@@ -50,12 +50,17 @@ static int hs31_school_context(Rec team,U eval,const Hs31ScoreScope *scope,U cac
 static int hs28_native_score(Rec recruit,Rec team,U eval,int *out) {
  if(!recruit || !team || !eval || !out)return 0;
  U scorer=q(eval+0xf8);if(!scorer)return 0;
- Rec f=context_ref(eval,6),season=f?reference(f,44):0;
- if(!season){release(f);return 0;}
+ Rec f=context_ref(eval,6),season=0;uint32_t year=0,week=0,type=0;
+ if(!cache_season_get(eval,f,&year,&week,&type)) { /* cache stack: the season memo of the window */
+  season=f?reference(f,44):0;
+  if(!season){release(f);return 0;}
+  year=scalar(season,2,0x100);week=scalar(season,4,0x100);type=scalar(season,5,0x108);
+  cache_season_check(eval,f,year,week,type,"HS_NATIVE_SCORE");
+ }
  Hs31ScoreScope scope;memset(&scope,0,sizeof(scope));scope.eval=eval;scope.scorer=scorer;
  scope.franchise_table=q((U)f+0x10);scope.franchise_handle=(U)f;scope.franchise_row=row(f);
  scope.team_table=q((U)team+0x10);scope.team_row=row(team);
- scope.year=scalar(season,2,0x100);scope.week=scalar(season,4,0x100);scope.type=scalar(season,5,0x108);
+ scope.year=year;scope.week=week;scope.type=type;
  release(season);release(f);if(scope.week>63)return 0;
  U cache[67];if(!hs31_school_context(team,eval,&scope,cache))return 0;
  struct {U rec;int32_t values[10];} candidate={(U)recruit,{0}};

@@ -16,14 +16,21 @@ _Static_assert(sizeof(PortalFundingCandidate)==72 && offsetof(PortalFundingCandi
 /* Runs after both native funding-allocation passes, before their reset.
    Observe funded actions and recorded execution separately; never spend,
    offer, or change a board here. */
+/* Cache stack: the two observers run inside one window (closed right after them, and again after an exception). */
+static int fund_observe_window;
 void DriAfterHsFunding(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   hs29_offer_invalidate(); /* Native funding may have created same-week offers. */
   U eval=r->rsi,holder=q(r->rbp-0x60);Rec team=holder?(Rec)q(holder):0;
+  if(team)fund_observe_window=cache_callback_window("FUND_OBSERVE",eval);
   if(team && hs28_pair_window(eval))hs28_coverage_observe(team,eval,"POST_FUNDING");
-  if(team && !faulted){portal29_observe(team,eval,"POST_FUNDING");portal29_funding_end(team,eval);hs33_release_school(team,eval);r2_funding_tick(team,eval);}
+  if(team && !faulted){portal29_observe(team,eval,"POST_FUNDING");
+   cache_callback_window_end(fund_observe_window);fund_observe_window=0;
+   portal29_funding_end(team,eval);hs33_release_school(team,eval);r2_funding_tick(team,eval);}
  } __except(fail_exception("HS_post_funding",GetExceptionCode())){}
+ if(fund_observe_window){cache_callback_window_end(fund_observe_window);fund_observe_window=0;}
 }
 static void hs28_funding(Registers *r,Rec team,U eval,int after_offers) {
  if(!hs28_pair_window(eval))return;
@@ -112,6 +119,7 @@ static void hs28_funding(Registers *r,Rec team,U eval,int after_offers) {
  test32_hs_minimum_share(team,eval,a,n,indices,pool,np);
 }
 void DriOnPortalFunding(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   U eval=r->rsi,tr=q(r->rbp-0x60);Rec team=tr?(Rec)q(tr):0;
@@ -219,6 +227,7 @@ void DriOnPortalFunding(Registers *r) {
 /* Safe boundary after the indexed scholarship pass and before the physical
    productive-action pass. There is no active candidate iterator to mutate. */
 void DriBetweenHsFunding(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted)return;
  __try {
   U eval=r->rsi,holder=q(r->rbp-0x60);Rec team=holder?(Rec)q(holder):0;if(!team)return;

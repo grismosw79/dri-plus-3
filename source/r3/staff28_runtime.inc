@@ -146,6 +146,7 @@ static int staff28_grade(U context,Rec team,Rec player,int *out){
 /* Hook native staff rank refresh, not the EPS update. This catches a changed
    coach at another school, including same-week coaching-carousel changes. */
 void DriStaff28Update(U context){
+    cache_hook_entry(CACHE_HOOK_OTHER);
     AcquireSRWLockExclusive(&staff28_lock);staff28_state.valid=0;ReleaseSRWLockExclusive(&staff28_lock);
     NativeStaff28Update(context);
 }
@@ -198,6 +199,7 @@ static int proximity28_grade(U context,Rec team,Rec player,int *out){
    bypassing the generic grade router. Intercept that entry as well so Alaska
    and neutral-state grades agree in eligibility, UI and CPU target cost. */
 int DriProximity28Grade(U context,Rec *team,Rec *player){
+    cache_hook_entry(CACHE_HOOK_GRADE);
     if(mode==1&&!faulted&&team&&player){
         __try {int grade;if(proximity28_grade(context,*team,*player,&grade))return grade;}
         __except(fail_exception("proximity28_direct",GetExceptionCode())){}

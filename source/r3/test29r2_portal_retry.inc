@@ -42,7 +42,7 @@ static int test29r2_portal_retry(Registers *r) {
   /* Verified native coordinator call at 0819f268..273: RCX evaluator,
      RDX destination map, R8 newly-signed map. Signed6 entries are skipped
      before selectors or side effects. Both maps remain owned by the caller. */
-  ((void(*)(U,U,U))(game_base+0x081b5670))(r->r13,r->rbp-0x78,r->rbp-0x18);
+  ((void(*)(U,U,U))(game_base+0x081b5670))(r->r13,r->rbp-0x78,r->rbp-0x18);cache_note_write();
   if(faulted || mode!=1)return -1;
   /* A later signing may close the sole conditional destination of another
      recruit. Recheck at this completed-pass boundary, with no board iterator

@@ -190,6 +190,7 @@ static int pp28_refresh(U context){
     return okay;
 }
 int DriPPGroupGrade(U context,Rec *team,int kind,int group,Rec *player){
+    cache_hook_entry(CACHE_HOOK_TEAM_GRADE);offer_cap_team(team);
     if(kind==6&&team&&*team&&group>=0&&group<10)pp28_refresh(context);
     return NativePPGroupGrade(context,team,kind,group,player);
 }

@@ -60,10 +60,11 @@ static U test31_offer_evaluator(U manager) {
  for(int j=0;j<PORTAL_FUNDING_EVALUATORS;j++)if(test31_offer_contexts[j].manager==manager){eval=test31_offer_contexts[j].eval;break;}
  ReleaseSRWLockExclusive(&test31_offer_lock);return eval;
 }
+static int offer_cap_live_count,offer_cap_live_own; /* offer_capacity_cache.inc: the scan's count and own offer */
 /* Test33: rank provisional places separately from the live hard ceiling.
    Count actual CPU scholarships at the native action boundary; neither a
    derived counter nor a provisional permit authorizes a same-pass overflow. */
-static int test32_hs_offer_capacity(Rec recruit,Rec applicant,U eval) {
+static int test32_hs_offer_capacity_scan(Rec recruit,Rec applicant,U eval) {
  Rec f=context_ref(eval,6),teams=f?array_field(f,45):0;
  U nt=teams?array_count(teams):0;int result=-1,count=0,own=0,applicant_seen=0;
  uint64_t seen[3]={0};
@@ -100,11 +101,13 @@ static int test32_hs_offer_capacity(Rec recruit,Rec applicant,U eval) {
  Rec player=reference(recruit,5);if(!player)goto done;
  int portal=transfer_recruit(recruit);
  int limit=portal?market30_limit(1):hs33_limit_stars((int)scalar(player,231,0x108));release(player);
- result=own || count<limit;
+ result=own || count<limit;offer_cap_live_count=count;offer_cap_live_own=own;
  if(!result)log_line("TEST36_ACTUAL_CAP,%s,%u,%u,%d,%d,NEW_OFFER_HELD_BEFORE_PAYMENT",portal?"PORTAL":"HS",applicant_id,row(recruit),count,limit);
 done:
  release(teams);release(f);return result;
 }
+#include "offer_capacity_cache.inc"
+static int test32_hs_offer_capacity(Rec recruit,Rec applicant,U eval){return offer_capacity_answer(recruit,applicant,eval);}
 /* Preserve published incoming ownership when a native recruit stage lags.
    This bounded local check runs only on a proposed unoffered productive action. */
 static int test33_hs_published(Rec recruit,Rec team) {
@@ -120,6 +123,7 @@ static int test33_hs_published(Rec recruit,Rec team) {
    normal and special CPU offer/payment routes. Returning1 asks the hook to
    return native false; permitted calls execute the unchanged native body. */
 int DriOnOfferAction(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OFFER);
  if(mode!=1 || faulted)return 0;
  __try {
   int action=i32((U)(r+1)+0x28),productive=action==2 || (action>=5 && action<=9);
@@ -155,7 +159,7 @@ int DriOnOfferAction(Registers *r) {
    blocked=r3_qb_admission(recruit,team,eval,"OPENING_OFFER");
   const char *reason=eval?(hs?"CURRENT_MARKET_SCOPE":"FROZEN_AUTHORIZATION"):"NO_CURRENT_EVALUATOR";
   if(!blocked && (hs || portal)) {
-   int capacity=test32_hs_offer_capacity(recruit,team,eval);
+   offer_cap.scope=1;int capacity=test32_hs_offer_capacity(recruit,team,eval);offer_cap.scope=0;
    if(capacity<0){portal_fault("HS32_actual_offer_count");blocked=1;reason="ACTUAL_OFFER_READ_FAILED";}
    else if(!capacity){blocked=1;reason="ACTUAL_CPU_STAR_CAP";}
   }

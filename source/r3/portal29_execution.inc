@@ -6,6 +6,9 @@
 #ifdef DRI_EMULATION_TEST
 static unsigned portal29_execution_test[8];
 #endif
+/* Cache stack: the observation after the calendar check runs inside a window (closed at its end, and by the hook
+   bodies after an exception). */
+static int exec_observe_window;
 static void portal29_execution_observe(U eval,Rec team,Rec target,int action,int native_cost,int points,const char *site) {
  if(mode!=1 || faulted || !eval || !team || !target)return;
  unsigned tid=scalar(team,383,0x100);if(tid>=138)return;
@@ -16,6 +19,7 @@ static void portal29_execution_observe(U eval,Rec team,Rec target,int action,int
  unsigned year=season?scalar(season,2,0x100):0,type=season?scalar(season,5,0x108):0,week=season?scalar(season,4,0x100):0;
  release(season);release(f);
  if(type!=6 || week<2 || week>6 || action<0 || action>12 || native_cost<0 || native_cost>10000){release(recruit);return;}
+ exec_observe_window=cache_callback_window("EXEC_OBSERVE",eval);
  /* Native guards and the success-only hook prove an executed application.
     Re-read offered capacity and native assignment independently for firm-role
     attribution; allocation is never inferred from the influence result. */
@@ -52,20 +56,25 @@ static void portal29_execution_observe(U eval,Rec team,Rec target,int action,int
   site,year,type,week,tid,row(recruit),action,native_cost,points,total_points,allocated,assigned,total,slot,round,offered,legal,firm,conditional,budget_ok,
   action==2?"PITCH_EXECUTED_COST_SEPARATE_FROM_CURRENT_ALLOCATION":"GENERIC_EXECUTED_NATIVE_COST_NOT_INFLUENCE");
  release(recruit);
+ cache_callback_window_end(exec_observe_window);exec_observe_window=0;
 }
 void DriAfterPortal29GenericAction(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_TEAM);offer_cap_team_at(r->rbp+0x67);
  if(mode!=1 || faulted)return;
  __try {
   U th=q(r->rbp+0x67);Rec team=th?(Rec)q(th):0,target=r->rsi?(Rec)q(r->rsi):0;
   portal29_execution_observe(r->r14,team,target,(int)r->r15,(int)r->r12,*(int*)(r->rbp+0x7f),"GENERIC_SUCCESS");
  } __except(fail_exception("portal29_generic_witness",GetExceptionCode())){}
+ if(exec_observe_window){cache_callback_window_end(exec_observe_window);exec_observe_window=0;}
 }
 void DriAfterPortal29Pitch(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_TEAM);offer_cap_team((const Rec *)r->r12);
  if(mode!=1 || faulted)return;
  __try {
   Rec team=r->r12?(Rec)q(r->r12):0,target=r->r13?(Rec)q(r->r13):0;
   portal29_execution_observe(r->rsi,team,target,2,0,*(int*)(r->rbp-0x7c),"PITCH_SUCCESS");
  } __except(fail_exception("portal29_pitch_witness",GetExceptionCode())){}
+ if(exec_observe_window){cache_callback_window_end(exec_observe_window);exec_observe_window=0;}
 }
 #ifdef DRI_EMULATION_TEST
 __declspec(dllexport) void DriTestPortal29GenericAction(Registers*r){DriAfterPortal29GenericAction(r);}

@@ -36,36 +36,43 @@ static void portal_maintenance(U eval) {
     maintenance_scope.year==next.year && maintenance_scope.week==next.week && maintenance_scope.type==next.type &&
     maintenance_scope.active==next.active)return;
  int grace=r2_seed_grace(eval,next.table,next.rid,next.year,next.week,0);
- portal_recover_market(eval,grace);
+ recover_window_site="PORTAL_MAINT_RECOVER_MARKET";portal_recover_market(eval,grace);recover_window_site=0;
  log_line("R2_SEEDED_INTEREST,%u,%u,%d,PRE_PLAN",next.year,next.week,grace);
  if(!faulted)portal_cleanup_all(eval);
  if(!faulted){maintenance_scope=next;log_line("PORTAL_MAINTENANCE,%u,%u,%u,COMPLETE",next.year,next.type,next.week);}
 }
 void DriAfterPortalWeekly(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  pt28_invalidate();
  if(mode!=1 || faulted)return;
+ /* Cache stack: the HS block below is one window (paused around t36_open), each step ending with a sub-phase
+    boundary; it closes before the portal part. The early exits leave the __try so the window always closes. */
+ volatile int window=0;U eval=0;
  __try {
-  U eval=q(r->rbp+0x60);
-  t36_open(eval,0,"WEEK_PUBLICATION");
+  eval=q(r->rbp+0x60);
+  window=cache_season_window_read(eval,"POST_WEEK");
+  cache_pause(1);t36_open(eval,0,"WEEK_PUBLICATION");cache_pause(0);cache_phase_boundary();
   /* Native weekly outcomes may have filled an HS-reserved positional seat. */
   for(unsigned tid=0;tid<138;tid++) {
    Rec team=portal_team_by_id(eval,tid);test29_class_invalidate(team);release(team);
   }
-  portal29_observe_all(eval,"POST_WEEK");if(faulted)return;
+  cache_phase_boundary();
+  portal29_observe_all(eval,"POST_WEEK");cache_phase_boundary();if(faulted)__leave;
   hs28_nsd_reset();
-  hs28_coverage_end(eval);if(faulted)return;
-  hs28_after_week(eval);if(faulted)return;
+  hs28_coverage_end(eval);cache_phase_boundary();if(faulted)__leave;
+  hs28_after_week(eval);cache_phase_boundary();if(faulted)__leave;
   /* Native HS outcomes occur outside the allocation calendar as well. */
-  hs28_cleanup_rivals(0,eval);if(faulted)return;
+  hs28_cleanup_rivals(0,eval);cache_phase_boundary();if(faulted)__leave;
   if(hs28_pair_window(eval)) {
-   hs29_reopen_uncommittable(eval,"POST_WEEK");if(faulted)return;
-   hs28_recover_market(eval,"POST_WEEK");if(faulted)return;
-   hs28_coverage_seed(eval);if(faulted)return;
+   hs29_reopen_uncommittable(eval,"POST_WEEK");cache_phase_boundary();if(faulted)__leave;
+   hs28_recover_market(eval,"POST_WEEK");cache_phase_boundary();if(faulted)__leave;
+   hs28_coverage_seed(eval);cache_phase_boundary();if(faulted)__leave;
    /* Test34: revisit ordinary class deficits after wins, losses and cleanup.
       Reservations still require the current native budget; this does not
       fabricate offers or borrow future-week hours. */
-   test34_class_refill(eval);if(faulted)return;
+   test34_class_refill(eval);cache_phase_boundary();if(faulted)__leave;
   }
+  cache_season_window_end(window);window=0;
   Rec franchise=context_ref(eval,6),season=franchise?reference(franchise,44):0;
   int portal=season && scalar(season,5,0x108)==6;
   int planned=portal && maintenance_scope.valid && maintenance_scope.active==1 &&
@@ -77,13 +84,16 @@ void DriAfterPortalWeekly(Registers *r) {
      Rescan at this safe end-of-batch boundary, including the last portal week.
      Do not mistake the initial seeded-interest transition for a spent round:
      at least one active planning pass must have happened in this campaign. */
-  if(planned)portal_recover_market(eval,grace);
+  if(planned){recover_window_site="POST_PORTAL_RECOVER_MARKET";portal_recover_market(eval,grace);recover_window_site=0;}
   if(portal && !faulted)portal_cleanup_all(eval);
   if(!faulted)hs34r3_checkpoint(eval);
  }
  __except(fail_exception("post_weekly_cleanup",GetExceptionCode())){}
+ cache_season_window_end(window);
+ cache_summary("POST_WEEK",eval);
 }
 void DriAfterPortalInstant(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  pt28_invalidate();
  if(mode!=1 || faulted)return;
  __try {
@@ -97,8 +107,10 @@ void DriAfterPortalInstant(Registers *r) {
  } __except(fail_exception("post_instant_cleanup",GetExceptionCode())){}
 }
 void DriAfterPortalNsd(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  pt28_invalidate();
  if(mode!=1 || faulted){academy29_pending_clear();return;}
  __try {academy29_verify_publication(r->r13);if(!faulted)hs_finalize_published(r->r13);if(!faulted)portal_cleanup_all(r->r13);if(!faulted)hs28_cleanup_rivals(0,r->r13);if(!faulted)test30_reconcile_offer_counters(r->r13);if(!faulted)hs34r3_checkpoint(r->r13);}
  __except(fail_exception("post_nsd_cleanup",GetExceptionCode())){}
+ cache_summary("POST_NSD",r->r13);
 }

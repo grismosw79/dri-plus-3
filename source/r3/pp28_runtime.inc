@@ -18,7 +18,7 @@ typedef struct {
 
 static void pp28_set_year(Rec record,uint32_t value) {
     U table=q((U)record+0x10),f=field(schema(record),0);
-    ((void(*)(U,uint32_t,U,uint32_t))q(q(table)+0x148))(table,row(record),f,value);
+    ((void(*)(U,uint32_t,U,uint32_t))q(q(table)+0x148))(table,row(record),f,value);cache_note_write();
     /* Exact native YearOffset writer also marks the table dirty here. */
     ((void(*)(U))(game_base+0x080595e0))(table);
 }
@@ -96,6 +96,7 @@ static int pp28_normalize_history(U context,Rec array,U caller) {
 }
 
 int DriPPBeforeAge(Registers *r) {
+    cache_hook_entry(CACHE_HOOK_OTHER);
     /* Our explicit non-aging refresh is scoped to its own thread, context,
        and exact history array. Even a fault must not age that refresh. */
     if(pp28_refresh_skip_age(r->r13,(Rec)q(r->rbp+0x6f)))return 1;
@@ -108,6 +109,7 @@ int DriPPBeforeAge(Registers *r) {
 }
 
 void DriPPPublish(Registers *r) {
+    cache_hook_entry(CACHE_HOOK_OTHER);
     if(mode!=1||faulted)return;
     __try {
         U vector=q(r->rbp-0x59),end=q(r->rbp-0x51),context=r->r13;

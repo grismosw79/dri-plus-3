@@ -24,9 +24,14 @@ typedef struct {int valid,prestige,flex_ready,flex_allowed,team_excess,hs_reserv
 /* Native setters in 081486b0 (stage) and 081a4273 (integer offer count)
    use the same table vfunc +148 and then 08055870(table). +140 is boolean. */
 static void portal_recovery_scalar(Rec record,int ordinal,unsigned value) {
+ /* Cache stack: a recruit stage write that stays below 5, or an HS preference re-ordering write, is one that no
+    HS snapshot reads (classified before the write; one extra stage read, inside a window only). */
+ int excused=cache.active && ((ordinal==9 && value<5 && scalar(record,9,0x108)<5) || (ordinal<=1 && cache.pref_scope));
  U table=q((U)record+0x10),key=field(schema(record),ordinal);
+ if(ordinal==9)cache_note_stage_write();
  ((void(*)(U,uint32_t,U,unsigned))q(q(table)+0x148))(table,row(record),key,value);
- ((void(*)(U))(game_base+0x080595e0))(table);
+ ((void(*)(U))(game_base+0x080595e0))(table);cache_note_write();
+ if(excused)cache.excused++;
 }
 static void portal_recovery_release(PortalRecoveryPlan *p) {
  for(unsigned i=0;i<p->count;i++)release(p->schools[i].record);
@@ -146,7 +151,7 @@ static void portal_recover_market(U eval,int opening_grace) {
  if(mode<0 || faulted)return;
  Rec franchise=context_ref(eval,6),transfers=0;
  PortalRecoveryPlan *plans=0;PortalRecoveryRoom *rooms=0;
- U used=0,count=0,manager=q(eval+0xc8);const char *error=0;
+ U used=0,count=0,manager=q(eval+0xc8);const char *error=0;int window=0;
  if(!franchise){error="recovery_franchise";goto cleanup;}
  transfers=array_field(franchise,46);
  if(!transfers){error="recovery_transfers";goto cleanup;}
@@ -156,6 +161,8 @@ static void portal_recover_market(U eval,int opening_grace) {
  plans=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,(count+1)*sizeof(*plans));
  rooms=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,138*POSITIONS*sizeof(*rooms));
  if(!plans || !rooms){error="recovery_memory";goto cleanup;}
+ /* Cache stack: the plan loop only reads (no stage or interest write, no native removal), so it is a window. */
+ window=cache_plan_window(recover_window_site,eval);
  for(U i=0;i<count;i++) {
   Rec recruit=array_at(transfers,i);
   if(!recruit){error="recovery_recruit";goto cleanup;}
@@ -169,6 +176,7 @@ static void portal_recover_market(U eval,int opening_grace) {
    used++;
   } else portal_recovery_release(&plans[used]);
  }
+ cache_plan_window_end(window);window=0;
  /* Do not apply a partially read or stale plan. The coordinator must ensure
     no native iterator is live while it invokes this maintenance pass. */
  for(U i=0;i<used;i++) {
@@ -197,7 +205,7 @@ static void portal_recover_market(U eval,int opening_grace) {
    Rec team=portal_team_by_id(eval,p->schools[j].tid);
    if(!team){error="recovery_drop_team";goto cleanup;}
    U candidate[6]={(U)p->recruit,0,0,0,0,0};
-   int result=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);
+   int result=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);cache_note_removal();
    int offered=portal_active_offer(p->recruit,team);
    if(!result && offered==0)test29_class_invalidate(team);
    release(team);
@@ -214,6 +222,7 @@ static void portal_recover_market(U eval,int opening_grace) {
   }
  }
 cleanup:
+ cache_plan_window_end(window);
  if(plans) {
   /* The extra slot owns any incomplete plan from the validation loop. */
   for(U i=0;i<=used;i++)portal_recovery_release(&plans[i]);
@@ -464,7 +473,7 @@ static void portal_deadline_recover(Rec recruit,U eval) {
  for(unsigned tid=0;tid<138;tid++)if(drop[tid]) {
   Rec team=portal_team_by_id(eval,tid);if(!team){error="deadline_drop_team";goto cleanup;}
   U candidate[6]={(U)recruit,0,0,0,0,0};
-  int result=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);
+  int result=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(manager,&team,candidate);cache_note_removal();
   int offered=portal_active_offer(recruit,team);release(team);
   if(result || offered){error="deadline_drop";goto cleanup;}
  }

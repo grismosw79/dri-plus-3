@@ -243,6 +243,7 @@ static int hs31_has_outside_offer(Rec recruit,U eval) {
  return 0;
 }
 void DriAfterHsCondition(Registers *r) {
+ cache_hook_entry(CACHE_HOOK_OTHER);
  if(mode!=1 || faulted || (r->rax&255))return;
  __try {
   U sp=(U)(r+1),eval=q(r->rbp+0x60);Rec recruit=(Rec)q(r->rbp+0x68);
@@ -329,10 +330,12 @@ static void test29r1_hs_actionable_order(Rec recruit,U eval) {
    order[j]=x;
   }
   for(U i=0;i<n;i++)changed|=order[i]!=i;
+  cache.pref_scope++; /* HS recruits below stage 4: writes no snapshot reads */
   if(changed)for(U i=0;i<n;i++) {
    portal_recovery_scalar(entries[i],0,tid[order[i]]);
    portal_recovery_scalar(entries[i],1,points[order[i]]);
   }
+  cache.pref_scope--;
   if(changed)log_line("TEST30_HS_PREFERENCE_ORDER,%u,%u,%u,EARNED_POINTS_ORDER",row(recruit),tid[0],tid[order[0]]);
  }
  for(U i=0;i<n;i++)release(entries[i]);release(top);

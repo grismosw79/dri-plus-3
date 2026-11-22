@@ -9,6 +9,7 @@ static Test29ClassCache test29_class_cache[138];
 static void test29_class_invalidate(Rec team) {
  if(!team)return;hs31_native_score_invalidate(team);unsigned tid=scalar(team,383,0x100);
  if(tid<138)test29_class_cache[tid].valid=0;
+ cache_note_class();
 }
 static int test29_class_cohorts(Rec team,const Hs15Snapshot *s,int junior[22]) {
  memset(junior,0,22*sizeof(*junior));Rec a=array_field(team,239);if(!a)return 0;

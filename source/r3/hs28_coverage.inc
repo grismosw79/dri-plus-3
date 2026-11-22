@@ -35,9 +35,14 @@ static void hs31_release_unexecuted(U table,uint32_t rid,unsigned tid);
 static void hs31_retry_deferred_apply(void);
 static void hs31_retry_deferred(U table,uint32_t rid,unsigned tid,int funded);
 static int hs28_market_scope(U eval,int reset) {
- Rec f=context_ref(eval,6),s=f?reference(f,44):0;
- if(!f || !s){release(s);release(f);return 0;}
- U table=q((U)f+0x10);uint32_t rid=row(f),year=scalar(s,2,0x100),week=scalar(s,4,0x100),type=scalar(s,5,0x108);
+ Rec f=context_ref(eval,6),s=0;uint32_t year=0,week=0,type=0;
+ if(!cache_season_get(eval,f,&year,&week,&type)) { /* cache stack: the season memo of the window */
+  s=f?reference(f,44):0;
+  if(!f || !s){release(s);release(f);return 0;}
+  year=scalar(s,2,0x100);week=scalar(s,4,0x100);type=scalar(s,5,0x108);
+  cache_season_check(eval,f,year,week,type,"HS28_MARKET_SCOPE");
+ }
+ U table=q((U)f+0x10);uint32_t rid=row(f);
  int match=hs28_market.valid && hs28_market.table==table && hs28_market.handle==(U)f &&
   hs28_market.row==rid && hs28_market.year==year && hs28_market.week==week && hs28_market.type==type;
  if(!match && reset) {
@@ -370,7 +375,15 @@ static int hs28_recovery_reserved(unsigned tid,int slot,int role,Rec recruit) {
 /* Native RecruitingTunables49 is RecruitingActions. The captured action
    descriptor has Cost2, BaseInfluenceGranted1, enabled5, immediate6. Native
    scholarship execution requests ActionType3; resolve by type, never array index. */
+static int hs28_recovery_cost_live(U eval,int offered);
+/* Cache stack (cache_elig.inc): the two recovery costs are kept for one generation. */
 static int hs28_recovery_cost(U eval,int offered) {
+ int cached=0,state=cost_memo_get(eval,offered,&cached);
+ if(state==1 && cache_fast())return cached;
+ int live=hs28_recovery_cost_live(eval,offered);
+ cost_memo_put(state,offered,cached,live);return live;
+}
+static int hs28_recovery_cost_live(U eval,int offered) {
  Rec tuning=(Rec)q(eval+0xd0),actions=tuning?array_field(tuning,49):0;
  if(!actions)return 0;
  U n=array_count(actions);if(n<2 || n>64){release(actions);return 0;}

@@ -10,11 +10,16 @@ typedef struct {
 static PortalCommitPlan commitment_plans[138];
 static SRWLOCK commitment_lock=SRWLOCK_INIT;
 static int portal_commit_scope(PortalCommitPlan *p,Rec team,U eval) {
- Rec f=context_ref(eval,6),s=f?reference(f,44):0;
- if(!f || !s){release(s);release(f);return 0;}
+ Rec f=context_ref(eval,6),s=0;uint32_t year=0,week=0,type=0;
+ if(!cache_season_get(eval,f,&year,&week,&type)) { /* cache stack: the season memo of the window */
+  s=f?reference(f,44):0;
+  if(!f || !s){release(s);release(f);return 0;}
+  year=scalar(s,2,0x100);week=scalar(s,4,0x100);type=scalar(s,5,0x108);
+  cache_season_check(eval,f,year,week,type,"PORTAL_COMMIT_SCOPE");
+ }
  p->franchise_table=q((U)f+0x10);p->franchise_handle=(U)f;p->franchise_row=row(f);
  p->team_table=q((U)team+0x10);p->team_row=row(team);
- p->year=scalar(s,2,0x100);p->week=scalar(s,4,0x100);p->type=scalar(s,5,0x108);
+ p->year=year;p->week=week;p->type=type;
  release(s);release(f);return 1;
 }
 static void portal_commit_plan_store(const PortalChoice *pool,int n,Rec team,U eval,const char *site) {
