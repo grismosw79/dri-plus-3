@@ -656,7 +656,10 @@ void DriOnPortalWeekly(Registers *r) {
   Rec recruit=(Rec)q(r->rbp+0x68);if(!recruit)return;
   U context=q(r->rbp+0x60);Rec team=portal_leader(recruit,context);
   if(!team){portal_fault("weekly_leader");return;}
+  /* Cache stack: this callback's acceptance decision is one window (closed before any write of the callback). */
+  int window=cache_callback_window("PORTAL_WEEKLY",context);
   int blocked=cpu_recruit_decision(recruit,team,context,"WEEKLY",1);
+  cache_callback_window_end(window);
   if(faulted || mode<0){release(team);return;}
   if(!blocked && transfer_recruit(recruit)) {
    int offer=portal_active_offer(recruit,team);
@@ -685,7 +688,10 @@ int DriOnHsOwnership(Registers *r) {
   if(next!=5 && next!=6)return 0;
   Rec team=portal_leader(recruit,context);
   if(!team){portal_fault("HS_transition_leader");return 0;}
+  /* Cache stack: this callback's acceptance decision is one window (closed before any write of the callback). */
+  int window=cache_callback_window("HS_WEEKLY",context);
   int blocked=cpu_recruit_decision(recruit,team,context,"HS_WEEKLY",1);
+  cache_callback_window_end(window);
   if(next==5 && scalar(recruit,9,0x108)<5 && !blocked && !faulted){
    int offer=portal_active_offer(recruit,team);
    if(offer<0)portal_fault("HS_transition_offer");
@@ -795,16 +801,22 @@ static void portal_prune(Rec team,U eval) {
  Rec held[MAX_BOARD]={0};
  for(U i=0;i<n;i++){Rec t=array_at(a,i);if(t){held[i]=reference(t,10);release(t);}}
  release(a);
+ /* Cache stack: this school's board decisions are one window, closed before every native removal and opened
+    again after it. */
+ int window=cache_callback_window("START_PRUNE",eval);
  for(U i=0;i<n;i++) {
   Rec recruit=held[i];if(!recruit)continue;
   int blocked=!faulted && mode>=0?cpu_recruit_decision(recruit,team,eval,"BOARD",0):0;
   /* Recheck after decoding: a fault must never become a destructive removal. */
   if(blocked && !faulted && mode==1) {
+   cache_callback_window_end(window);window=0;
    U candidate[6]={(U)recruit,0,0,0,0,0};
    int rc=((int(*)(U,Rec*,void*))(game_base+0x081a7b10))(q(eval+0xc8),&team,candidate);cache_note_removal();
    log_line("PORTAL_DROP,%u,%u,%d",scalar(team,383,0x100),row(recruit),rc);
    if(rc)portal_fault("native_remove");
+   window=cache_callback_window("START_PRUNE",eval);
   }
   release(recruit);
  }
+ cache_callback_window_end(window);
 }
