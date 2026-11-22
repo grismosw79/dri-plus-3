@@ -423,6 +423,7 @@ static void r2_ordinary_funding(U eval,Rec team,unsigned year,unsigned week,unsi
 static int r2_hs_requested(Rec recruit,Rec team,U eval);
 
 #include "cache_stack.inc"
+#include "cache_elig.inc"
 #include "portal.inc"
 #include "test29_observe.inc"
 #include "hs28_score.inc"

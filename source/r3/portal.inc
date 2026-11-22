@@ -98,6 +98,9 @@ static int native_recruit_eligible(U eval,Rec team,Rec recruit) {
  if(!matches(desc,player_type) && !matches(desc,recruit_type)) {
   portal_fault("eligibility_record_type");return 0;
  }
+ /* Cache stack (cache_elig.inc): fast returns a valid memo answer; shadow calls the native and compares. */
+ int memo_cached=-1;unsigned memo_gen=0;int memo_slot=elig_memo_begin(eval,team,recruit,&memo_cached,&memo_gen);
+ if(memo_slot>=0 && memo_cached>=0 && cache_fast())return memo_cached;
  NativeEligibilityReason reason={0};reason.data[15]=15;int allowed=0;
  Rec prev_eval=rc4_evaluating;rc4_evaluating=rc4_member(recruit)?recruit:0;
  __try {
@@ -117,6 +120,7 @@ static int native_recruit_eligible(U eval,Rec team,Rec recruit) {
   } __finally {
    rc4_evaluating=prev_eval;native_eligibility_reason_release(&reason);}
  } __except(native_eligibility_exception(GetExceptionInformation())) {return 0;}
+ elig_memo_end(memo_slot,memo_cached,memo_gen,allowed,team,recruit);
  return allowed;
 }
 /* Native NSD appends a signing to a per-team temporary vector before publishing

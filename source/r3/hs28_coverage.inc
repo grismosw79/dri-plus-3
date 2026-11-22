@@ -375,7 +375,15 @@ static int hs28_recovery_reserved(unsigned tid,int slot,int role,Rec recruit) {
 /* Native RecruitingTunables49 is RecruitingActions. The captured action
    descriptor has Cost2, BaseInfluenceGranted1, enabled5, immediate6. Native
    scholarship execution requests ActionType3; resolve by type, never array index. */
+static int hs28_recovery_cost_live(U eval,int offered);
+/* Cache stack (cache_elig.inc): the two recovery costs are kept for one generation. */
 static int hs28_recovery_cost(U eval,int offered) {
+ int cached=0,state=cost_memo_get(eval,offered,&cached);
+ if(state==1 && cache_fast())return cached;
+ int live=hs28_recovery_cost_live(eval,offered);
+ cost_memo_put(state,offered,cached,live);return live;
+}
+static int hs28_recovery_cost_live(U eval,int offered) {
  Rec tuning=(Rec)q(eval+0xd0),actions=tuning?array_field(tuning,49):0;
  if(!actions)return 0;
  U n=array_count(actions);if(n<2 || n>64){release(actions);return 0;}
