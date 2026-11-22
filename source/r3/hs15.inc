@@ -150,7 +150,11 @@ static int hs15_secured(Hs15Snapshot *s,Rec franchise,Rec team,U eval,int ordina
  }
  release(a);return ok;
 }
-static int hs15_collect(Hs15Snapshot *s,Rec team,U eval) {
+static int hs15_collect_live(Hs15Snapshot *s,Rec team,U eval);
+#include "cache_snapshot.inc"
+static int hs15_collect(Hs15Snapshot *s,Rec team,U eval){return snapshot_memo_collect(s,team,eval);}
+/* The snapshot itself (unchanged). */
+static int hs15_collect_live(Hs15Snapshot *s,Rec team,U eval) {
  static const int fields[POSITIONS]={5,2,1,9,8,4,3,0,6,7,3,6,1,4,5,7,0,2,8,1,6,4};
  memset(s,0,sizeof(*s));
  s->prestige=(int)scalar(team,384,0x100);
