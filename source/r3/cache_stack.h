@@ -35,5 +35,7 @@ static void cache_note_write(void);
 static void cache_note_removal(void);
 static void cache_note_pt28(void);
 static void cache_note_class(void);
+static void offer_cap_team(const Rec *slot);
+static void offer_cap_team_at(U where);
 static uint64_t cache_log_calls; /* every log_line call, counted before any filter */
 #endif

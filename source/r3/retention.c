@@ -229,7 +229,7 @@ static int fail_exception(const char *where, DWORD code) {
    eligibility, an offer, capacity, interest or ownership. */
 /* Native entries go through DriHsShortlist; DRI's own lockout checks (locked_out) call the body directly. */
 unsigned char DriHsShortlist(Wrap *recruit,Rec *team,U tuning) {
-    cache_hook_entry(CACHE_HOOK_TEAM_GRADE);
+    cache_hook_entry(CACHE_HOOK_TEAM_GRADE);offer_cap_team(team);
     return hs_shortlist_advice(recruit,team,tuning);
 }
 static unsigned char hs_shortlist_advice(Wrap *recruit,Rec *team,U tuning) {

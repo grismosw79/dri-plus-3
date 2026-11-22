@@ -55,7 +55,7 @@ __declspec(dllexport) void DriTestVisit29ObserveHooks(U *out) {
 }
 #endif
 void DriOnVisit29Eligible(Registers *r) {
- cache_hook_entry(CACHE_HOOK_TEAM);
+ cache_hook_entry(CACHE_HOOK_TEAM);offer_cap_team((const Rec *)r->r15);
  if(mode<0 || faulted || !(r->rax&255))return;
  __try {
   Rec team=(Rec)q(r->r15),target=(Rec)q(r->rsi);U eval=r->rbx;
