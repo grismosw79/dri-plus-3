@@ -279,8 +279,13 @@ static Rec pt28_raw_ref(Rec r,unsigned n){
    completion. The training appointment becomes active after its StartEvent.
    The blocking training transaction holds the scheduler off the stopping
    lattice until every team has progressed. All reads are persisted facts. */
+static int pt28_checkpoint_fields(Rec franchise,Rec season,int stage,int offseason);
 static int pt28_checkpoint(Rec franchise,Rec season){
  int stage=(int)scalar(season,3,0x108),offseason=(int)scalar(season,8,0x100);
+ return pt28_checkpoint_fields(franchise,season,stage,offseason);
+}
+/* The checkpoint with the two season fields its caller read (the same two reads, in the same order). */
+static int pt28_checkpoint_fields(Rec franchise,Rec season,int stage,int offseason){
  if(stage!=2||offseason!=8)return 1;
  if(scalar(season,4,0x100)!=7)return 0;
  Rec fe=reference(franchise,9),manager=fe?reference(fe,20):0;
@@ -391,10 +396,13 @@ static int pt28_grade_impl(U context,Rec team,Rec player,int *grade,Pt28Result *
  }
  *grade=result.grade;if(details)*details=result;return 1;
 }
-static int pt28_grade(U context,Rec team,Rec player,int *grade){
- if(!context||!team||!player||!grade)return 0;
+#include "pt28_grade_reads.inc"
+/* franchise/season: the ready check's references (cache stack fast) or 0; ftable/frow: its franchise identity
+   (shadow compare). */
+static int pt28_grade(U context,Rec team,Rec player,int *grade,Rec franchise,Rec season,U ftable,uint32_t frow){
+ if(!context||!team||!player||!grade){release(season);release(franchise);return 0;}
  int ok=0;AcquireSRWLockExclusive(&pt28_lock);
- __try {ok=pt28_grade_impl(context,team,player,grade,0);}
+ __try {ok=cache_on()?pt28_grade_once(context,team,player,grade,0,franchise,season,ftable,frow):pt28_grade_impl(context,team,player,grade,0);}
  __except(fail_exception("PT28_grade",GetExceptionCode())){ok=0;}
  ReleaseSRWLockExclusive(&pt28_lock);
  if(ok==0&&!faulted)portal_fault("PT28_inputs");return ok==1&&!faulted&&mode==1;
@@ -402,15 +410,21 @@ static int pt28_grade(U context,Rec team,Rec player,int *grade){
 int DriPt28Grade(U context,Rec *team,Rec *player){
  cache_hook_entry(CACHE_HOOK_GRADE);
  if(mode==1&&!faulted&&team&&*team&&player&&*player){
-  int ready=0;
+  int ready=0;Rec held_franchise=0,held_season=0;U ready_table=0;uint32_t ready_row=0;
   __try {
    /* Native UI initialization can request a grade before a Dynasty/SeasonInfo
       exists. Match the explicit league-start gate used by the EPS dispatcher. */
    Rec franchise=context?context_ref(context,2):0;
    Rec season=franchise?reference(franchise,44):0;
-   ready=season&&scalar(season,24,0xf8);release(season);release(franchise);
+   ready=season&&scalar(season,24,0xf8);
+   /* Cache stack (pt28_grade_reads.inc): fast hands both references to the grade; shadow compares the identity. */
+   if(ready && cache_fast()){held_franchise=franchise;held_season=season;}
+   else {
+    if(ready && franchise && cache_shadow()){ready_table=q((U)franchise+0x10);ready_row=row(franchise);}
+    release(season);release(franchise);
+   }
   }__except(fail_exception("PT28_ready",GetExceptionCode())){ready=0;}
-  if(ready){int grade;if(pt28_grade(context,*team,*player,&grade))return grade;}
+  if(ready){int grade;if(pt28_grade(context,*team,*player,&grade,held_franchise,held_season,ready_table,ready_row))return grade;}
  }
  return NativePt28Grade(context,team,player);
 }
