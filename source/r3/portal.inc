@@ -463,7 +463,9 @@ static int portal_roster_finish(PortalRoster *s,int step) {
  s->role=s->count?v->rating[(s->starters<s->count?s->starters:s->count)-1]:0;
  return 1;
 }
-static int portal_rosters_collect(PortalRoster *s,int rooms,Rec team,U context,int single_pos,PortalRoomIssue *issue) {
+#include "cache_room.inc"
+/* The room itself (unchanged). */
+static int portal_rosters_collect_live(PortalRoster *s,int rooms,Rec team,U context,int single_pos,PortalRoomIssue *issue) {
  static const int fields[POSITIONS]={5,2,1,9,8,4,3,0,6,7,3,6,1,4,5,7,0,2,8,1,6,4};
  if((rooms!=1 && rooms!=POSITIONS) || (rooms==1 && (single_pos<0 || single_pos>=POSITIONS)))
   return portal_room_issue(issue,"POSITION",single_pos);
