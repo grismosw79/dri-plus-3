@@ -12,6 +12,7 @@ The starting point is **R22 TU1117 T3**, promoted to the complete November 19, 2
 - [Compatibility review guide](docs/COMPATIBILITY.md)
 - [Current release and validation](docs/CURRENT-RELEASE.md)
 - [Open placeholder-record bug](docs/issues/001-staff28-placeholder.md)
+- [Speed changes](docs/SPEED.md)
 - [Contribution workflow](CONTRIBUTING.md)
 
 ## Source map
