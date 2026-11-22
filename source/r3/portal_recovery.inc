@@ -151,7 +151,7 @@ static void portal_recover_market(U eval,int opening_grace) {
  if(mode<0 || faulted)return;
  Rec franchise=context_ref(eval,6),transfers=0;
  PortalRecoveryPlan *plans=0;PortalRecoveryRoom *rooms=0;
- U used=0,count=0,manager=q(eval+0xc8);const char *error=0;
+ U used=0,count=0,manager=q(eval+0xc8);const char *error=0;int window=0;
  if(!franchise){error="recovery_franchise";goto cleanup;}
  transfers=array_field(franchise,46);
  if(!transfers){error="recovery_transfers";goto cleanup;}
@@ -161,6 +161,8 @@ static void portal_recover_market(U eval,int opening_grace) {
  plans=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,(count+1)*sizeof(*plans));
  rooms=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,138*POSITIONS*sizeof(*rooms));
  if(!plans || !rooms){error="recovery_memory";goto cleanup;}
+ /* Cache stack: the plan loop only reads (no stage or interest write, no native removal), so it is a window. */
+ window=cache_plan_window(recover_window_site,eval);
  for(U i=0;i<count;i++) {
   Rec recruit=array_at(transfers,i);
   if(!recruit){error="recovery_recruit";goto cleanup;}
@@ -174,6 +176,7 @@ static void portal_recover_market(U eval,int opening_grace) {
    used++;
   } else portal_recovery_release(&plans[used]);
  }
+ cache_plan_window_end(window);window=0;
  /* Do not apply a partially read or stale plan. The coordinator must ensure
     no native iterator is live while it invokes this maintenance pass. */
  for(U i=0;i<used;i++) {
@@ -219,6 +222,7 @@ static void portal_recover_market(U eval,int opening_grace) {
   }
  }
 cleanup:
+ cache_plan_window_end(window);
  if(plans) {
   /* The extra slot owns any incomplete plan from the validation loop. */
   for(U i=0;i<=used;i++)portal_recovery_release(&plans[i]);

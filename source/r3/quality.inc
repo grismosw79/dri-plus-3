@@ -138,7 +138,8 @@ void DriOnPortalPrepare(Registers *r) {
   if(portal_pass){
    phase="prepare_portal_market";
    /* Freeze all schools before this school's recovery mutates its board. */
-   market29_portal_begin(r->r13);if(faulted)return;
+   /* Cache stack: the portal market forecast writes no stage, owner or board, so it is a window. */
+   {int window=cache_plan_window("PORTAL_MARKET",r->r13);market29_portal_begin(r->r13);cache_plan_window_end(window);}if(faulted)return;
    hs32_offseason_admit(team,r->r13);if(faulted)return;
    market29_portal_recovery(team,r->r13);if(faulted)return;
   }

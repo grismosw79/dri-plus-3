@@ -59,7 +59,7 @@ static int portal_active_offer(Rec recruit,Rec team) {
 }
 /* Published ownership is authoritative even if the saved interest list is
    stale. Return -1 on duplicate ownership or unreadable records. */
-static int portal_published_owner(Rec recruit,U eval,int *tid) {
+static int portal_published_owner_live(Rec recruit,U eval,int *tid) {
  if(tid)*tid=-1;
  Rec player=reference(recruit,5),franchise=context_ref(eval,6);
  if(!player || !franchise){release(player);release(franchise);return -1;}

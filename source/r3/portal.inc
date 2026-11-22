@@ -222,6 +222,7 @@ static void portal_note_owner(Rec recruit,Rec team,U context,const char *site,in
  else log_line("PORTAL_SIGN_PENDING,%s,%u,%u,AWAIT_NATIVE_SIGNED",site,tid,row(recruit));
 }
 static void portal_note_signing(Rec recruit,Rec team,U context,const char *site) {portal_note_owner(recruit,team,context,site,0);}
+#include "cache_scans.inc"
 #include "portal_integrity.inc"
 /* A published acquisition can still have a stale Top10/SoftCommitted stage in
    loaded saves. It is already owned, not a new recruiting opportunity. Preserve
@@ -359,15 +360,9 @@ static int portal_players(PortalRoster *s,int rooms,Rec team,int ordinal,int ret
  }
  release(a);return ok;
 }
-static int portal_commits(PortalRoster *s,int rooms,Rec franchise,Rec team,int ordinal,int portal,U context,PortalRoomIssue *issue) {
- const char *source=portal?"PORTAL_COMMITMENTS":"HS_COMMITMENTS";
- Rec a=array_field(franchise,ordinal);if(!a)return portal_room_issue(issue,source,-1);
- U n=array_count(a);if(n>12000){release(a);return portal_room_issue(issue,source,-1);}
+/* The per-entry body of portal_commits (unchanged; ok starts at 1). */
+static int portal_commits_entry(PortalRoster *s,int rooms,Rec team,Rec r,unsigned stage,int portal,U context,PortalRoomIssue *issue) {
  int ok=1;
- for(U i=0;i<n;i++) {
-  Rec r=array_at(a,i);if(!r){ok=portal_room_issue(issue,source,(int)i);break;}
-  unsigned stage=scalar(r,9,0x108);
-  if(stage==5 || stage==6) {
    Rec p=reference(r,5);if(!p) ok=0;
    else {
     int owns=0,tid=-1;
@@ -387,9 +382,46 @@ static int portal_commits(PortalRoster *s,int rooms,Rec franchise,Rec team,int o
     if(ok && owns)ok=portal_add_many(s,rooms,p,portal,stage==6,portal);
     release(p);
    }
+ return ok;
+}
+static int portal_commits(PortalRoster *s,int rooms,Rec franchise,Rec team,int ordinal,int portal,U context,PortalRoomIssue *issue) {
+ const char *source=portal?"PORTAL_COMMITMENTS":"HS_COMMITMENTS";
+ Rec a=array_field(franchise,ordinal);if(!a)return portal_room_issue(issue,source,-1);
+ U n=array_count(a);if(n>12000){release(a);return portal_room_issue(issue,source,-1);}
+ int ok=1;
+ /* Cache stack (cache_scans.inc): as hs15_secured. */
+ SecuredList *c=cache_scan_ready()?secured_list_get(franchise,a,n,context,ordinal):0;
+ if(c && cache_fast()) {
+  CacheCount *k=&cache_counts[CACHE_COMMITS_LIST];k->queries++;k->hits++;
+  for(unsigned i=0;i<c->count && ok;i++) {
+   Rec r=array_at(a,c->idx[i]);if(!r){k->stale++;ok=portal_room_issue(issue,source,(int)c->idx[i]);break;}
+   unsigned stage=scalar(r,9,0x108);
+   if(stage==5 || stage==6)ok=portal_commits_entry(s,rooms,team,r,stage,portal,context,issue);
+   else k->stale++;
+   if(!ok)portal_room_issue(issue,source,(int)row(r));
+   release(r);
+  }
+  if(ok && c->null_at<n)ok=portal_room_issue(issue,source,(int)c->null_at);
+  release(a);return ok;
+ }
+ unsigned live_count=0;int same=1,null_stop=0;U stop=n;
+ for(U i=0;i<n;i++) {
+  Rec r=array_at(a,i);if(!r){ok=portal_room_issue(issue,source,(int)i);stop=i;null_stop=1;break;}
+  unsigned stage=scalar(r,9,0x108);
+  if(stage==5 || stage==6) {
+   if(c && (live_count>=c->count || c->idx[live_count]!=(uint32_t)i))same=0;
+   live_count++;
+   ok=portal_commits_entry(s,rooms,team,r,stage,portal,context,issue);
   }
   if(!ok)portal_room_issue(issue,source,(int)row(r));
-  release(r);if(!ok) break;
+  release(r);if(!ok){stop=i;break;}
+ }
+ if(c) {
+  CacheCount *k=&cache_counts[CACHE_COMMITS_LIST];k->queries++;k->hits++;k->compares++;
+  if(!secured_list_same(c,same,live_count,stop,null_stop,n) && cache_mismatch(CACHE_COMMITS_LIST))
+   log_line("CACHE_STACK_MISMATCH,COMMITS_LIST,%s,list=%d,team=%u,n=%llu,live=%u,cached=%u,stop=%llu,null_stop=%d,cached_null=%llu",
+    cache.site?cache.site:"-",ordinal,scalar(team,383,0x100),(unsigned long long)n,live_count,c->count,(unsigned long long)stop,null_stop,
+    (unsigned long long)c->null_at);
  }
  release(a);return ok;
 }

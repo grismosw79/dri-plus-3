@@ -36,7 +36,7 @@ static void portal_maintenance(U eval) {
     maintenance_scope.year==next.year && maintenance_scope.week==next.week && maintenance_scope.type==next.type &&
     maintenance_scope.active==next.active)return;
  int grace=r2_seed_grace(eval,next.table,next.rid,next.year,next.week,0);
- portal_recover_market(eval,grace);
+ recover_window_site="PORTAL_MAINT_RECOVER_MARKET";portal_recover_market(eval,grace);recover_window_site=0;
  log_line("R2_SEEDED_INTEREST,%u,%u,%d,PRE_PLAN",next.year,next.week,grace);
  if(!faulted)portal_cleanup_all(eval);
  if(!faulted){maintenance_scope=next;log_line("PORTAL_MAINTENANCE,%u,%u,%u,COMPLETE",next.year,next.type,next.week);}
@@ -84,7 +84,7 @@ void DriAfterPortalWeekly(Registers *r) {
      Rescan at this safe end-of-batch boundary, including the last portal week.
      Do not mistake the initial seeded-interest transition for a spent round:
      at least one active planning pass must have happened in this campaign. */
-  if(planned)portal_recover_market(eval,grace);
+  if(planned){recover_window_site="POST_PORTAL_RECOVER_MARKET";portal_recover_market(eval,grace);recover_window_site=0;}
   if(portal && !faulted)portal_cleanup_all(eval);
   if(!faulted)hs34r3_checkpoint(eval);
  }
