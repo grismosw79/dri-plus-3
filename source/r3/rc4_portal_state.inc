@@ -43,9 +43,9 @@ static int rc4_file(int write) {
         HANDLE h=CreateFileW(temp,GENERIC_WRITE,0,0,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,0);
         if(h==INVALID_HANDLE_VALUE)return 0;
         d->checksum=rc4_hash(UINT64_C(1469598103934665603),d,offsetof(Rc4Disk,checksum));
-        int ok=WriteFile(h,d,sizeof(*d),&bytes,0) && bytes==sizeof(*d) && FlushFileBuffers(h);
+        int ok=WriteFile(h,d,sizeof(*d),&bytes,0) && bytes==sizeof(*d);
         CloseHandle(h);
-        if(ok && MoveFileExW(temp,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))return 1;
+        if(ok && MoveFileExW(temp,path,MOVEFILE_REPLACE_EXISTING))return 1;
         DeleteFileW(temp);return 0;
     }
     HANDLE h=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,0,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
