@@ -322,8 +322,8 @@ static int r2_hire_file(R2Hire *h,int save) {
  if(swprintf(temp,1100,L"%ls.%lu.tmp",path,(unsigned long)GetCurrentProcessId())<0)return 0;
  file=CreateFileW(temp,GENERIC_WRITE,0,0,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,0);
  if(file==INVALID_HANDLE_VALUE)return 0;
- int ok=WriteFile(file,h,sizeof(*h),&bytes,0) && bytes==sizeof(*h) && FlushFileBuffers(file);
- CloseHandle(file);if(ok)ok=MoveFileExW(temp,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;
+ int ok=WriteFile(file,h,sizeof(*h),&bytes,0) && bytes==sizeof(*h);
+ CloseHandle(file);if(ok)ok=MoveFileExW(temp,path,MOVEFILE_REPLACE_EXISTING)!=0;
  if(!ok)DeleteFileW(temp);return ok;
 }
 static void r2_hc_hire(void *module,Rec coach,Rec dest,int role,int length) {

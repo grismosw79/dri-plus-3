@@ -94,8 +94,8 @@ static int hs34r3_write(const Hs34R3Disk *d) {
 #endif
  wchar_t path[1024],tmp[1100];if(!hs34r3_path(path,d)||swprintf(tmp,1100,L"%ls.%lu.tmp",path,(unsigned long)GetCurrentProcessId())<0)return 0;
  HANDLE h=CreateFileW(tmp,GENERIC_WRITE,0,0,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,0);if(h==INVALID_HANDLE_VALUE)return 0;
- DWORD put=0;int ok=WriteFile(h,d,sizeof(*d),&put,0)&&put==sizeof(*d)&&FlushFileBuffers(h);CloseHandle(h);
- if(ok)ok=MoveFileExW(tmp,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;
+ DWORD put=0;int ok=WriteFile(h,d,sizeof(*d),&put,0)&&put==sizeof(*d);CloseHandle(h);
+ if(ok)ok=MoveFileExW(tmp,path,MOVEFILE_REPLACE_EXISTING)!=0;
  if(!ok)DeleteFileW(tmp);return ok;
 }
 static int hs34r3_restore(Hs28TeamPlan *plan,Hs28Choice *pool,int n,Rec team,U eval,const Hs15Snapshot *s) {

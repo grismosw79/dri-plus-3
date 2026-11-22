@@ -151,6 +151,7 @@ static int rm_snapshot_quiet(Rec p,PilotPlayerState*s){U vt,getter,type,data,dvt
 }
 static int rm_clock(Rec f,int*year){int ok=0;Rec r=reference(f,44,&ok);int valid=ok&&r&&pilot_get(r,3,3)==2&&pilot_get(r,5,3)==6&&pilot_get(r,8,2)==9&&pilot_get(r,4,2)==9;*year=r?pilot_get(r,2,2):0;release(r);return valid&&*year>=2027&&*year<2200&&!capture_fault;}
 static int rm_owned(Rec p,int expected){int count=0;for(int t=0;t<RM_TEAMS;t++)for(int slot=0;slot<2;slot++){int ok=0;Rec a=array_field(rm_teams[t],slot?33:239,&ok);U n=array_count(a);if(!ok||n>RM_ROOM){release(a);return 0;}for(U i=0;i<n;i++){Rec q=array_at(a,i,&ok);int same=q&&pilot_same(p,q);release(q);if(!ok||(same&&(slot||t!=expected))){release(a);return 0;}count+=same;}release(a);}return count==(expected>=0?1:0);}
+#include "roster_owner_index.inc"
 static int rm_native_gate(void*ctx,int pi,int ti,int*quote){(void)ctx;Rec p=rm_refs[pi].player,r=rm_refs[pi].recruit,t=rm_teams[ti];int pid=rm_state->p[pi].id;U ptype=0,rtype=0,grades=0,finance=0,vt=0,getter=0;PilotPlayerState before,after;PilotMoney bm,am;
  if(capture_fault||!rm_snapshot_quiet(p,&before)||!pilot_money(t,&bm))return -1;
  if(!local_read(rm_manager+0x80,&ptype,8)||!local_read(rm_manager+0xa0,&rtype,8)||!local_read(rm_manager+0x180,&grades,8)||!local_read(rm_manager+0x1a0,&finance,8)||!ptype||!rtype||!grades||!finance)return -1;
@@ -269,7 +270,7 @@ static int rm_native_cut(RMAction*a,int ordinal){
  #define CUT_REQUIRE(value,name) do{if(!(value)){rm_tx_failure(a,ordinal,name,"CHECK",1,0);goto done;}}while(0)
  #define CUT_EQUAL(value,want,name,field) do{int got_=(value),want_=(want);if(got_!=want_){rm_tx_failure(a,ordinal,name,field,want_,got_);goto done;}}while(0)
  CUT_REQUIRE(rm_open(rm_state,a->src)&&q->original==a->src&&q->team==-1&&q->moved&&!q->held&&!q->arrival&&!q->pool&&!q->user&&!q->injured,"CUT_POLICY_BOUNDARY");
- CUT_REQUIRE(active>0&&oldpay>=0&&!capture_fault&&rm_owned(p,a->src),"CUT_BEFORE_OWNERSHIP");
+ CUT_REQUIRE(active>0&&oldpay>=0&&!capture_fault&&rm_owned_before(p,a->src),"CUT_BEFORE_OWNERSHIP");
  for(int slot=0;slot<2;slot++){Rec arr=array_field(src,slot?33:239,&ok);U n=array_count(arr);release(arr);CUT_REQUIRE(ok&&n<=RM_ROOM,"CUT_SOURCE_ARRAY");total+=(int)n;}
  CUT_REQUIRE(total>90,"CUT_ONLY_ABOVE_90");
  CUT_EQUAL(rm_array_occurrences(rm_franchise,42,p,&retired_before),0,"CUT_BEFORE_POOL","RetiredOccurrences");
@@ -309,7 +310,7 @@ static int rm_native_execute(RMAction*a,int ordinal){
  #define TX_EQUAL(value,want,name,field) do{int actual_=(value),expected_=(want);if(actual_!=expected_)return rm_tx_failure(a,ordinal,name,field,expected_,actual_);}while(0)
  TX_REQUIRE(rm_managed(rm_state,a->dst)&&(a->src<0||rm_managed(rm_state,a->src)),"USER_SCOPE_BOUNDARY");
  TX_REQUIRE(active>=0&&sa>=0&&oldpay>=0&&!capture_fault,"BEFORE_SCALARS");
- TX_REQUIRE(rm_owned(p,a->src),"BEFORE_UNIQUE_OWNERSHIP");
+ TX_REQUIRE(rm_owned_before(p,a->src),"BEFORE_UNIQUE_OWNERSHIP");
  TX_REQUIRE(pilot_snapshot(p,&before,ordinal,0),"BEFORE_PLAYER_SNAPSHOT");
  TX_REQUIRE(pilot_money(dst,&bm),"BEFORE_DESTINATION_LEDGER");if(src)TX_REQUIRE(pilot_money(src,&bs),"BEFORE_SOURCE_LEDGER");
  int gate=rm_native_gate(0,a->player,a->dst,&quote);
@@ -420,6 +421,7 @@ static int rm_run_plan(void){
   if(capture_fault||rm_executed!=i){rm_abort("EXECUTION_PREFIX_OR_CAPTURE_FAILED");return 0;}
   rm_first_tx_issue[0]=0;
   int result=rm_native_execute(&rm_state->a[i],i+1);
+  rm_owner_index_touch(rm_state->a[i].src);rm_owner_index_touch(rm_state->a[i].dst);
   if(result==1){rm_executed++;rm_state->committed++;continue;}
   if(result!=2){rm_abort(rm_first_tx_issue[0]?rm_first_tx_issue:"TRANSACTION_OR_REQUALIFICATION_FAILED");return 0;}
   const RMAction *stale=&rm_state->a[i];
@@ -457,11 +459,12 @@ static void rm_before_enroll(U module,U tp){if(!enabled||!rm_active||rm_fallback
     completed cut snapshots keep their stable committed ordinal. */
  rm_cut_states=calloc(RM_ACTIONS,sizeof(*rm_cut_states));if(!rm_cut_states){rm_abort("CUT_PRESERVATION_ALLOCATION; no custom transactions started");__leave;}
  if(!rm_require_roster_limits(RM_CAP_COMMIT))__leave;
- if(!rm_run_plan())__leave;
+ rm_owner_index_begin();int ran=rm_run_plan();rm_owner_index_end();
+ if(!ran)__leave;
  if(!rm_audit_seal()){rm_abort("POST_TRANSACTION_AUDIT_SEAL_FAILED");__leave;}
  log_line("RM18R22_ROSTER_TIMING plan_ms=%llu transactions_ms=%llu total_ms=%llu",(unsigned long long)rm18_planned_ms,(unsigned long long)(GetTickCount64()-rm18_started-rm18_planned_ms),(unsigned long long)(GetTickCount64()-rm18_started));
  rm_done=1;log_line("RM17R3 PREP_APPLIED transactions=%d; final native enrollment/charts and saved-state review still pending",rm_executed);
- }__except(EXCEPTION_EXECUTE_HANDLER){rm_abort("NATIVE_OR_PLANNER_EXCEPTION");}rm_failed_route();}
+ }__except(EXCEPTION_EXECUTE_HANDLER){rm_abort("NATIVE_OR_PLANNER_EXCEPTION");}rm_owner_index_end();rm_failed_route();}
 static int rm_block(U tp,unsigned site){
  if(!enabled||!rm_active)return 0;rm_failed_route();if(rm_fallback)return 0;
  Rec t=0;int ok=0;
