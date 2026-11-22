@@ -20,6 +20,8 @@ static SRWLOCK pt28_lock=SRWLOCK_INIT;
 static volatile LONG pt28_epoch=1;
 static volatile LONG pt28_wait_logs=0;
 static struct {U table;uint32_t id;int year,week,type,stage,offseason;unsigned samples[2][22];} pt28_log_scope;
+/* Cache stack: content hash of the last pt28_read_departures result (pt28_roster_cache.inc). */
+static uint64_t pt28_departures_hash;
 static void pt28_invalidate(void){InterlockedIncrement(&pt28_epoch);cache_note_pt28();}
 static void pt28_reset(void){
  memset(&pt28_index,0,sizeof(pt28_index));
@@ -56,7 +58,7 @@ static int pt28_ledger_owner(Rec recruit,Rec player){
 static int pt28_read_departures(Rec franchise){
  /* A missing/unpopulated PLV evaluator is legitimate before PLV starts.
     Once the array exists, malformed entries remain a hard validation failure. */
- PortalDepartures *d=&pt28_index.departed;memset(d,0,sizeof(*d));
+ PortalDepartures *d=&pt28_index.departed;memset(d,0,sizeof(*d));pt28_departures_hash=1469598103934665603ull;
  Rec fe=reference(franchise,9);if(!fe)return 1;
  Rec pl=reference(fe,13);release(fe);if(!pl)return 1;
  Rec a=array_field(pl,7);release(pl);if(!a)return 1;
@@ -68,7 +70,7 @@ static int pt28_read_departures(Rec franchise){
    Rec p=reference(e,4);if(!p){release(e);ok=0;break;}
    U table=q((U)p+0x10);
    if(d->table&&d->table!=table){release(p);release(e);ok=0;break;}
-   d->table=table;d->ids[d->count++]=row(p);release(p);
+   d->table=table;d->ids[d->count++]=row(p);pt28_departures_hash=(pt28_departures_hash^row(p))*1099511628211ull;release(p);
   }release(e);
  }release(a);return ok;
 }
@@ -128,9 +130,27 @@ static int pt28_player(Rec player,int incoming,Pt28Player *p){
  p->redshirt=scalar(player,234,0x108)==2;p->arrival_delay=0;p->rostered=0;
  return p->pos>=0&&p->pos<22&&p->ovr>=0&&p->ovr<=99&&p->year>=0&&p->year<=3;
 }
+/* Cache stack: Position, OVR and class year first (the validity check pt28_player applies to every player), then
+   previous team, team and redshirt only for the candidate's group. The same getters return the same values; a
+   player outside the group was discarded after those reads anyway. */
+static int pt28_add_player_lazy(Rec player,int incoming,int group,Pt28Player *p,int *in_group) {
+ int pos=(int)scalar(player,3,0x108),ovr=(int)scalar(player,191,0x100),year=(int)scalar(player,242,0x108);
+ *in_group=0;
+ if(!(pos>=0&&pos<22&&ovr>=0&&ovr<=99&&year>=0&&year<=3))return 0;
+ if(pt28_group(pos)!=group)return 1;
+ unsigned previous=scalar(player,230,0x100),current=scalar(player,261,0x100);
+ p->table=q((U)player+0x10);p->id=row(player);p->pos=pos;p->ovr=ovr;p->year=year;
+ p->hs=previous==255&&(current==255||incoming);p->develop=!p->hs;
+ p->redshirt=scalar(player,234,0x108)==2;p->arrival_delay=0;p->rostered=0;
+ *in_group=1;return 1;
+}
 static int pt28_add(Pt28Room *room,Rec player,int incoming,int group,int hs_override){
- Pt28Player p;if(!pt28_player(player,incoming,&p))return 0;
- if(pt28_group(p.pos)!=group)return 1;
+ Pt28Player p;
+ if(cache_on()){int in_group;if(!pt28_add_player_lazy(player,incoming,group,&p,&in_group))return 0;if(!in_group)return 1;}
+ else {
+  if(!pt28_player(player,incoming,&p))return 0;
+  if(pt28_group(p.pos)!=group)return 1;
+ }
  if(hs_override>=0){p.hs=hs_override;p.develop=!hs_override;}
  p.rostered=!incoming;
  for(int i=0;i<room->count;i++)if(room->players[i].table==p.table&&room->players[i].id==p.id){
@@ -166,6 +186,7 @@ static int pt28_roster_array(Pt28Room *room,Rec team,int ordinal,int incoming,in
   release(p);if(!ok)break;
  }release(a);return ok;
 }
+#include "pt28_roster_cache.inc"
 static int pt28_read_pending(Pt28Room *room,Rec recruit,Rec team,int group,int offered,const PortalSign *accepted){
  unsigned stage=scalar(recruit,9,0x108);if(stage!=5&&stage!=6)return 1;
  unsigned klass=scalar(recruit,2,0x108);if(klass>7)return 0;
@@ -350,7 +371,7 @@ static int pt28_grade_impl(U context,Rec team,Rec player,int *grade,Pt28Result *
  Pt28Player candidate;
  if(!ok||!pt28_player(player,pt28_published_owner(player)>=0,&candidate)){release(franchise);return 0;}
  Pt28Room room;memset(&room,0,sizeof(room));int group=pt28_group(candidate.pos);
- ok=pt28_jobs(team,group,&room)&&pt28_roster_array(&room,team,239,0,group,stage==2)&&
+ ok=pt28_jobs(team,group,&room)&&pt28_roster_cached(&room,team,group,stage==2)&&
     pt28_roster_array(&room,team,33,1,group,0)&&pt28_board(&room,franchise,team,group);
  release(franchise);if(!ok)return 0;
  if(delay_hs)for(int i=0;i<room.count;i++){
