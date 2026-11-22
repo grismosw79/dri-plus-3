@@ -35,9 +35,14 @@ static void hs31_release_unexecuted(U table,uint32_t rid,unsigned tid);
 static void hs31_retry_deferred_apply(void);
 static void hs31_retry_deferred(U table,uint32_t rid,unsigned tid,int funded);
 static int hs28_market_scope(U eval,int reset) {
- Rec f=context_ref(eval,6),s=f?reference(f,44):0;
- if(!f || !s){release(s);release(f);return 0;}
- U table=q((U)f+0x10);uint32_t rid=row(f),year=scalar(s,2,0x100),week=scalar(s,4,0x100),type=scalar(s,5,0x108);
+ Rec f=context_ref(eval,6),s=0;uint32_t year=0,week=0,type=0;
+ if(!cache_season_get(eval,f,&year,&week,&type)) { /* cache stack: the season memo of the window */
+  s=f?reference(f,44):0;
+  if(!f || !s){release(s);release(f);return 0;}
+  year=scalar(s,2,0x100);week=scalar(s,4,0x100);type=scalar(s,5,0x108);
+  cache_season_check(eval,f,year,week,type,"HS28_MARKET_SCOPE");
+ }
+ U table=q((U)f+0x10);uint32_t rid=row(f);
  int match=hs28_market.valid && hs28_market.table==table && hs28_market.handle==(U)f &&
   hs28_market.row==rid && hs28_market.year==year && hs28_market.week==week && hs28_market.type==type;
  if(!match && reset) {

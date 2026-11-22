@@ -130,6 +130,22 @@ static int cache_season_window_read(U eval,const char *site) {
  }
  release(season);release(f);return began;
 }
+/* FAST: 1 = the memo answers for this eval and franchise (values filled). */
+static int cache_season_get(U eval,Rec f,uint32_t *year,uint32_t *week,uint32_t *type) {
+ if(!cache_fast() || !f || !cache_season.active || cache_season.eval!=eval ||
+    cache_season.franchise_table!=q((U)f+0x10) || cache_season.franchise_row!=row(f))return 0;
+ cache_counts[CACHE_SEASON_SCOPE].queries++;cache_counts[CACHE_SEASON_SCOPE].hits++;
+ *year=cache_season.year;*week=cache_season.week;*type=cache_season.type;return 1;
+}
+/* SHADOW: compare the memo with the live values the caller just read (the live values are used). */
+static void cache_season_check(U eval,Rec f,uint32_t year,uint32_t week,uint32_t type,const char *where) {
+ if(!cache_shadow() || !f || !cache_season.active || cache_season.eval!=eval ||
+    cache_season.franchise_table!=q((U)f+0x10) || cache_season.franchise_row!=row(f))return;
+ CacheCount *c=&cache_counts[CACHE_SEASON_SCOPE];c->queries++;c->hits++;c->compares++;
+ if((cache_season.year!=year || cache_season.week!=week || cache_season.type!=type) && cache_mismatch(CACHE_SEASON_SCOPE))
+  log_line("CACHE_STACK_MISMATCH,SEASON_SCOPE,%s,%u,%u,%u,where=%s,memo=%u/%u/%u",cache.site?cache.site:"-",year,type,week,where,
+   cache_season.year,cache_season.type,cache_season.week);
+}
 static void cache_season_window_end(int began){if(began){memset(&cache_season,0,sizeof(cache_season));cache_window_close();}}
 /* The decision part of one native-pass callback (mode 1 only): a window with the season memo set. */
 static int cache_callback_window(const char *site,U eval) {
